@@ -16,3 +16,5 @@ Finally, I refined spacing, card sizing, modern filter bar styling, and empty-st
 
 I kept naming and folder structure straightforward so reviewers understand responsibilities quickly and can contribute without long onboarding effort.
 # eventApp
+
+App Link : https://event-app-green-chi.vercel.app/
