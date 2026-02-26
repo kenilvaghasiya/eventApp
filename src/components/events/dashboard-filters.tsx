@@ -52,8 +52,8 @@ export function DashboardFilters({ sports, viewMode }: DashboardFiltersProps) {
 
   return (
     <div className="rounded-2xl border bg-white p-3 shadow-sm">
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1fr_auto]">
-        <div className="relative">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+        <div className="relative min-w-0">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input
             value={search}
@@ -63,11 +63,11 @@ export function DashboardFilters({ sports, viewMode }: DashboardFiltersProps) {
               updateParams(value, date, location, selectedSport);
             }}
             placeholder="Search by event name..."
-            className="h-11 rounded-xl border-slate-200 bg-slate-50 pl-9 focus-visible:bg-white"
+            className="h-11 w-full rounded-xl border-slate-200 bg-slate-50 pl-9 focus-visible:bg-white"
           />
         </div>
 
-        <div className="relative">
+        <div className="relative min-w-0">
           <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input
             type="date"
@@ -77,11 +77,11 @@ export function DashboardFilters({ sports, viewMode }: DashboardFiltersProps) {
               setDate(value);
               updateParams(search, value, location, selectedSport);
             }}
-            className="h-11 rounded-xl border-slate-200 bg-slate-50 pl-9 focus-visible:bg-white"
+            className="h-11 w-full rounded-xl border-slate-200 bg-slate-50 pl-9 pr-2 text-sm focus-visible:bg-white"
           />
         </div>
 
-        <div className="relative">
+        <div className="relative min-w-0">
           <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input
             value={location}
@@ -91,18 +91,18 @@ export function DashboardFilters({ sports, viewMode }: DashboardFiltersProps) {
               updateParams(search, date, value, selectedSport);
             }}
             placeholder="Search by location..."
-            className="h-11 rounded-xl border-slate-200 bg-slate-50 pl-9 focus-visible:bg-white"
+            className="h-11 w-full rounded-xl border-slate-200 bg-slate-50 pl-9 focus-visible:bg-white"
           />
         </div>
 
-        <div className="relative">
+        <div className="relative min-w-0">
           <Trophy className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Select
             value={selectedSport}
             onChange={(event) => {
               updateParams(search, date, location, event.target.value);
             }}
-            className="h-11 rounded-xl border-slate-200 bg-slate-50 pl-9 focus-visible:bg-white"
+            className="h-11 w-full rounded-xl border-slate-200 bg-slate-50 pl-9 focus-visible:bg-white"
           >
             {sportsOptions.map((sport) => (
               <option key={sport || "all"} value={sport}>
@@ -111,7 +111,7 @@ export function DashboardFilters({ sports, viewMode }: DashboardFiltersProps) {
             ))}
           </Select>
         </div>
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end">
           <button
             type="button"
             onClick={() => {
@@ -140,7 +140,7 @@ export function DashboardFilters({ sports, viewMode }: DashboardFiltersProps) {
             }`}
           >
             <LayoutGrid className="h-4 w-4" />
-            Card
+            <span className="hidden sm:inline">Card</span>
           </button>
           <button
             type="button"
@@ -150,7 +150,7 @@ export function DashboardFilters({ sports, viewMode }: DashboardFiltersProps) {
             }`}
           >
             <List className="h-4 w-4" />
-            Table
+            <span className="hidden sm:inline">Table</span>
           </button>
         </div>
       </div>

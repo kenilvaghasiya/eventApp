@@ -84,7 +84,7 @@ export function EventList({ events, viewMode }: EventListProps) {
   return (
     <div className="flex flex-wrap gap-[30px]">
       {events.map((event) => (
-        <Card key={event.id} className="w-full max-w-[300px]">
+        <Card key={event.id} className="w-full sm:max-w-[300px]">
           {event.image_url ? (
             <img src={event.image_url} alt={event.name} className="h-36 w-full rounded-t-lg object-cover" />
           ) : (
