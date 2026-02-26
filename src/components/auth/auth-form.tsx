@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
-import { Eye } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
 import { loginAction, loginWithGoogleAction, signUpAction } from "@/app/actions";
@@ -20,6 +20,7 @@ interface AuthFormProps {
 
 export function AuthForm({ mode }: AuthFormProps) {
   const [isPending, startTransition] = useTransition();
+  const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
 
   const form = useForm<AuthInput>({
@@ -103,13 +104,20 @@ export function AuthForm({ mode }: AuthFormProps) {
                   <FormControl>
                     <div className="relative">
                       <Input
-                        type="password"
+                        type={showPassword ? "text" : "password"}
                         placeholder="Enter password"
                         autoComplete="current-password"
                         className="h-11 bg-slate-50 pr-10"
                         {...field}
                       />
-                      <Eye className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-slate-400" />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        className="absolute right-3 top-3.5 text-slate-400"
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
                     </div>
                   </FormControl>
                   <FormMessage />
