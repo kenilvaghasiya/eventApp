@@ -3,108 +3,263 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type Database = {
   public: {
     Tables: {
-      events: {
+      profiles: {
         Row: {
           id: string;
-          user_id: string;
+          display_name: string | null;
+          avatar_url: string | null;
+          bio: string | null;
+          timezone: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          display_name?: string | null;
+          avatar_url?: string | null;
+          bio?: string | null;
+          timezone?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          display_name?: string | null;
+          avatar_url?: string | null;
+          bio?: string | null;
+          timezone?: string | null;
+        };
+        Relationships: [];
+      };
+      projects: {
+        Row: {
+          id: string;
           name: string;
-          sport_type: string;
-          event_at: string;
           description: string | null;
-          image_url: string | null;
-          image_path: string | null;
+          key_prefix: string;
+          owner_id: string;
+          color: string | null;
+          emoji: string | null;
+          archived: boolean;
+          start_date: string | null;
+          end_date: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          description?: string | null;
+          key_prefix: string;
+          owner_id: string;
+          color?: string | null;
+          emoji?: string | null;
+          archived?: boolean;
+          start_date?: string | null;
+          end_date?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          name?: string;
+          description?: string | null;
+          key_prefix?: string;
+          color?: string | null;
+          emoji?: string | null;
+          archived?: boolean;
+          start_date?: string | null;
+          end_date?: string | null;
+        };
+        Relationships: [];
+      };
+      project_members: {
+        Row: {
+          id: string;
+          project_id: string;
+          user_id: string;
+          role: Database["public"]["Enums"]["member_role"];
+          invited_at: string;
+          joined_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          user_id: string;
+          role?: Database["public"]["Enums"]["member_role"];
+          invited_at?: string;
+          joined_at?: string | null;
+        };
+        Update: {
+          role?: Database["public"]["Enums"]["member_role"];
+          joined_at?: string | null;
+        };
+        Relationships: [];
+      };
+      invitations: {
+        Row: {
+          id: string;
+          project_id: string;
+          email: string;
+          token: string;
+          role: Database["public"]["Enums"]["invite_role"];
+          expires_at: string;
+          accepted_at: string | null;
+          invited_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          email: string;
+          token: string;
+          role?: Database["public"]["Enums"]["invite_role"];
+          expires_at: string;
+          accepted_at?: string | null;
+          invited_by: string;
+          created_at?: string;
+        };
+        Update: {
+          accepted_at?: string | null;
+          expires_at?: string;
+        };
+        Relationships: [];
+      };
+      tickets: {
+        Row: {
+          id: string;
+          project_id: string;
+          title: string;
+          description: string | null;
+          status: Database["public"]["Enums"]["ticket_status"];
+          priority: Database["public"]["Enums"]["ticket_priority"];
+          type: Database["public"]["Enums"]["ticket_type"];
+          assignee_id: string | null;
+          reporter_id: string;
+          parent_id: string | null;
+          sprint_id: string | null;
+          due_date: string | null;
+          estimate: number | null;
+          ticket_number: number;
           created_at: string;
           updated_at: string;
         };
         Insert: {
           id?: string;
-          user_id: string;
-          name: string;
-          sport_type: string;
-          event_at: string;
+          project_id: string;
+          title: string;
           description?: string | null;
-          image_url?: string | null;
-          image_path?: string | null;
+          status?: Database["public"]["Enums"]["ticket_status"];
+          priority?: Database["public"]["Enums"]["ticket_priority"];
+          type?: Database["public"]["Enums"]["ticket_type"];
+          assignee_id?: string | null;
+          reporter_id: string;
+          parent_id?: string | null;
+          sprint_id?: string | null;
+          due_date?: string | null;
+          estimate?: number | null;
+          ticket_number?: number;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
-          id?: string;
-          user_id?: string;
-          name?: string;
-          sport_type?: string;
-          event_at?: string;
+          title?: string;
           description?: string | null;
-          image_url?: string | null;
-          image_path?: string | null;
-          created_at?: string;
-          updated_at?: string;
+          status?: Database["public"]["Enums"]["ticket_status"];
+          priority?: Database["public"]["Enums"]["ticket_priority"];
+          type?: Database["public"]["Enums"]["ticket_type"];
+          assignee_id?: string | null;
+          due_date?: string | null;
+          estimate?: number | null;
         };
         Relationships: [];
       };
-      venues: {
+      comments: {
+        Row: {
+          id: string;
+          ticket_id: string;
+          author_id: string;
+          body: string;
+          edited_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          ticket_id: string;
+          author_id: string;
+          body: string;
+          edited_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          body?: string;
+          edited_at?: string | null;
+        };
+        Relationships: [];
+      };
+      chat_messages: {
+        Row: {
+          id: string;
+          project_id: string;
+          sender_id: string;
+          body: string;
+          file_url: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          sender_id: string;
+          body: string;
+          file_url?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          body?: string;
+          file_url?: string | null;
+        };
+        Relationships: [];
+      };
+      notifications: {
         Row: {
           id: string;
           user_id: string;
-          name: string;
-          address: string;
+          type: string;
+          reference_id: string | null;
+          read: boolean;
           created_at: string;
-          updated_at: string;
         };
         Insert: {
           id?: string;
           user_id: string;
-          name: string;
-          address: string;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          user_id?: string;
-          name?: string;
-          address?: string;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
-      event_venues: {
-        Row: {
-          event_id: string;
-          venue_id: string;
-          created_at: string;
-        };
-        Insert: {
-          event_id: string;
-          venue_id: string;
+          type: string;
+          reference_id?: string | null;
+          read?: boolean;
           created_at?: string;
         };
         Update: {
-          event_id?: string;
-          venue_id?: string;
-          created_at?: string;
+          read?: boolean;
         };
         Relationships: [];
       };
-      sports: {
+      sprints: {
         Row: {
           id: string;
-          user_id: string;
+          project_id: string;
           name: string;
+          start_date: string | null;
+          end_date: string | null;
+          status: Database["public"]["Enums"]["sprint_status"];
           created_at: string;
         };
         Insert: {
           id?: string;
-          user_id: string;
+          project_id: string;
           name: string;
+          start_date?: string | null;
+          end_date?: string | null;
+          status?: Database["public"]["Enums"]["sprint_status"];
           created_at?: string;
         };
         Update: {
-          id?: string;
-          user_id?: string;
           name?: string;
-          created_at?: string;
+          start_date?: string | null;
+          end_date?: string | null;
+          status?: Database["public"]["Enums"]["sprint_status"];
         };
         Relationships: [];
       };
@@ -116,17 +271,15 @@ export type Database = {
       [_ in never]: never;
     };
     Enums: {
-      [_ in never]: never;
+      member_role: "owner" | "admin" | "developer" | "viewer";
+      invite_role: "admin" | "developer" | "viewer";
+      ticket_status: "backlog" | "todo" | "in_progress" | "in_review" | "done" | "cancelled";
+      ticket_priority: "critical" | "high" | "medium" | "low" | "none";
+      ticket_type: "bug" | "feature" | "task" | "improvement" | "question" | "epic";
+      sprint_status: "planned" | "active" | "completed";
     };
     CompositeTypes: {
       [_ in never]: never;
     };
   };
-};
-
-export type EventRow = Database["public"]["Tables"]["events"]["Row"];
-export type VenueRow = Database["public"]["Tables"]["venues"]["Row"];
-
-export type EventWithVenues = EventRow & {
-  venues: VenueRow[];
 };

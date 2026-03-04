@@ -1,10 +1,5 @@
-import { AuthShell } from "@/components/auth/auth-shell";
-import { AuthForm } from "@/components/auth/auth-form";
+import { redirect } from "next/navigation";
 
-export default function SignUpPage() {
-  return (
-    <AuthShell>
-      <AuthForm mode="signup" />
-    </AuthShell>
-  );
+export default function SignupAliasPage() {
+  redirect("/register");
 }

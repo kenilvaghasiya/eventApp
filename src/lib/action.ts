@@ -1,29 +1,20 @@
-export type ActionErrorCode =
-  | "VALIDATION_ERROR"
-  | "UNAUTHORIZED"
-  | "NOT_FOUND"
-  | "CONFLICT"
-  | "UNKNOWN";
+export type ActionCode = "VALIDATION" | "UNAUTHORIZED" | "FORBIDDEN" | "NOT_FOUND" | "UNKNOWN";
 
-export type ActionResult<TData = void> =
-  | { ok: true; data: TData; message?: string }
-  | { ok: false; error: string; code: ActionErrorCode };
+export type ActionResult<T> =
+  | { ok: true; data: T; message?: string }
+  | { ok: false; code: ActionCode; error: string };
 
-export function ok<TData>(data: TData, message?: string): ActionResult<TData> {
-  return { ok: true, data, message };
-}
+export const actionOk = <T>(data: T, message?: string): ActionResult<T> => ({ ok: true, data, message });
+export const actionErr = (error: string, code: ActionCode = "UNKNOWN"): ActionResult<never> => ({
+  ok: false,
+  code,
+  error
+});
 
-export function err(error: string, code: ActionErrorCode = "UNKNOWN"): ActionResult<never> {
-  return { ok: false, error, code };
-}
-
-export async function createSafeAction<TData>(
-  action: () => Promise<ActionResult<TData>>
-): Promise<ActionResult<TData>> {
+export async function safeAction<T>(fn: () => Promise<ActionResult<T>>): Promise<ActionResult<T>> {
   try {
-    return await action();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unexpected error";
-    return err(message, "UNKNOWN");
+    return await fn();
+  } catch (e) {
+    return actionErr(e instanceof Error ? e.message : "Unexpected server error");
   }
 }

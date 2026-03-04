@@ -1,46 +1,59 @@
-import { CreateEventModal } from "@/components/events/create-event-modal";
-import { DashboardFilters } from "@/components/events/dashboard-filters";
-import { EventList } from "@/components/events/event-list";
-import { PaginationControls } from "@/components/events/pagination-controls";
-import { getEvents, getSportTypes, getSportOptions } from "@/lib/events";
+import Link from "next/link";
 
-interface DashboardPageProps {
-  searchParams: Promise<{ search?: string; sport?: string; date?: string; location?: string; page?: string; view?: string }>;
-}
+import { ProjectCreateForm } from "@/components/projects/project-create-form";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getMyProjects } from "@/lib/data";
+import { formatDateTime } from "@/lib/date";
 
-export default async function DashboardPage({ searchParams }: DashboardPageProps) {
-  const params = await searchParams;
-  const [events, sports, sportOptions] = await Promise.all([
-    getEvents({ search: params.search, sport: params.sport, date: params.date, location: params.location }),
-    getSportTypes(),
-    getSportOptions()
-  ]);
-  const viewMode = params.view === "table" ? "table" : "card";
-  const pageSize = 10;
-  const totalPages = Math.max(1, Math.ceil(events.length / pageSize));
-  const rawPage = Number(params.page ?? "1");
-  const currentPage = Number.isFinite(rawPage) ? Math.min(Math.max(Math.floor(rawPage), 1), totalPages) : 1;
-  const start = (currentPage - 1) * pageSize;
-  const paginatedEvents = events.slice(start, start + pageSize);
+export default async function DashboardPage() {
+  const projects = await getMyProjects();
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <section className="space-y-6">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Sports Events Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Search, filter, and manage all your events.</p>
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <p className="text-muted-foreground">Your projects and quick actions.</p>
         </div>
-        <CreateEventModal sportOptions={sportOptions} />
+        <Button asChild>
+          <Link href="/projects/new">Create project page</Link>
+        </Button>
       </div>
 
-      <DashboardFilters sports={sports} viewMode={viewMode} />
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          Showing {paginatedEvents.length} of {events.length} events
-        </p>
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Create Project</CardTitle>
+          <CardDescription>Create without leaving dashboard.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ProjectCreateForm compact />
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {projects.map((project) => (
+          <Card key={project.id}>
+            <CardHeader>
+              <CardTitle>{project.name}</CardTitle>
+              <CardDescription>
+                {project.key_prefix} • {project.role}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">{project.description || "No description yet."}</p>
+              <p className="text-xs text-muted-foreground">Created {formatDateTime(project.created_at)}</p>
+              <Button asChild variant="outline" className="w-full">
+                <Link href={`/projects/${project.id}`}>Open project</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
       </div>
-      <EventList events={paginatedEvents} viewMode={viewMode} />
-      <PaginationControls currentPage={currentPage} totalPages={totalPages} />
-    </div>
+
+      {projects.length === 0 && (
+        <p className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">No projects yet. Create one to get started.</p>
+      )}
+    </section>
   );
 }

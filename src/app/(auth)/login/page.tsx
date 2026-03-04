@@ -1,10 +1,16 @@
-import { AuthShell } from "@/components/auth/auth-shell";
-import { AuthForm } from "@/components/auth/auth-form";
-export default function LoginPage() {
+import { LoginForm } from "@/components/auth/login-form";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
+export default function LoginPage() {
   return (
-    <AuthShell>
-      <AuthForm mode="login" />
-    </AuthShell>
+    <Card className="w-full max-w-md">
+      <CardHeader>
+        <CardTitle>Welcome back</CardTitle>
+        <CardDescription>Sign in using email/password, Google, or magic link.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <LoginForm />
+      </CardContent>
+    </Card>
   );
 }
