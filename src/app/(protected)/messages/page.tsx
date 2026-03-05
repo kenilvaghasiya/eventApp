@@ -1,14 +1,43 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { redirect } from "next/navigation";
 
-export default function MessagesPage() {
+import { MessagesChatLayout } from "@/components/messages/messages-chat-layout";
+import {
+  getCurrentUser,
+  getDirectMessagesWith,
+  getMessageThreads,
+  getOnlineUserIds,
+  getOtherProfiles,
+  getProfileById
+} from "@/lib/data";
+
+export default async function MessagesPage() {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const [threads, discover] = await Promise.all([getMessageThreads(), getOtherProfiles()]);
+
+  const selectedUserId = threads[0]?.partner.id ?? discover[0]?.id ?? null;
+  const [selectedProfile, messages] = selectedUserId
+    ? await Promise.all([getProfileById(selectedUserId), getDirectMessagesWith(selectedUserId)])
+    : [null, []];
+
+  const onlineUserIds = await getOnlineUserIds([
+    ...new Set([
+      ...threads.map((thread) => thread.partner.id),
+      ...discover.map((profile) => profile.id),
+      ...(selectedUserId ? [selectedUserId] : [])
+    ])
+  ]);
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Direct Messages</CardTitle>
-      </CardHeader>
-      <CardContent className="text-sm text-muted-foreground">
-        DM inbox route is ready. Add direct_messages table and thread UI as a follow-up.
-      </CardContent>
-    </Card>
+    <MessagesChatLayout
+      actorId={user.id}
+      selectedUserId={selectedUserId}
+      selectedProfile={selectedProfile}
+      threads={threads}
+      discover={discover}
+      messages={messages}
+      onlineUserIds={onlineUserIds}
+    />
   );
 }

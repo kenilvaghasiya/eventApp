@@ -1,13 +1,12 @@
 import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { getEnv } from "@/lib/env";
-import { getCurrentUser } from "@/lib/data";
+import { getCurrentUser, getUnreadNotificationCount } from "@/lib/data";
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
-  const env = getEnv();
   const user = await getCurrentUser();
-  if (!env.disableAuth && !user) redirect("/login");
+  if (!user) redirect("/login");
+  const unreadNotifications = await getUnreadNotificationCount();
 
-  return <AppShell email={user?.email ?? "Demo mode"}>{children}</AppShell>;
+  return <AppShell email={user.email} unreadNotifications={unreadNotifications}>{children}</AppShell>;
 }

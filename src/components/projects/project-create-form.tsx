@@ -21,8 +21,8 @@ export function ProjectCreateForm({ compact = false }: { compact?: boolean }) {
     resolver: zodResolver(projectSchema),
     defaultValues: {
       name: "",
-      keyPrefix: "",
       description: "",
+      keyPrefix: "",
       emoji: "",
       color: "#2563eb",
       startDate: "",
@@ -60,41 +60,6 @@ export function ProjectCreateForm({ compact = false }: { compact?: boolean }) {
             </FormItem>
           )}
         />
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField
-            control={form.control}
-            name="keyPrefix"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Project Key *</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="TF"
-                    {...field}
-                    onChange={(event) => field.onChange(event.target.value.toUpperCase())}
-                    maxLength={8}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="emoji"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Emoji</FormLabel>
-                <FormControl>
-                  <Input placeholder="🚀" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
 
         {!compact && (
           <>

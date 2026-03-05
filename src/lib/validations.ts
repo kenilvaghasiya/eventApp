@@ -17,11 +17,21 @@ export const projectSchema = z.object({
   description: z.string().optional(),
   keyPrefix: z
     .string()
-    .min(2, "Project key is required.")
     .max(8)
-    .regex(/^[A-Z0-9]+$/, "Project key must be uppercase letters/numbers only."),
+    .regex(/^[A-Z0-9]+$/, "Project key must be uppercase letters/numbers only.")
+    .optional()
+    .or(z.literal("")),
   color: z.string().optional(),
-  emoji: z.string().optional(),
+  emoji: z.string().optional().or(z.literal("")),
+  startDate: z.string().optional(),
+  endDate: z.string().optional()
+});
+
+export const projectSettingsSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(2, "Project name is required."),
+  description: z.string().optional(),
+  color: z.string().optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional()
 });
@@ -55,10 +65,17 @@ export const chatSchema = z.object({
   body: z.string().min(1, "Message cannot be empty.")
 });
 
+export const directMessageSchema = z.object({
+  recipientId: z.string().uuid(),
+  body: z.string().min(1, "Message cannot be empty.")
+});
+
 export type AuthInput = z.infer<typeof authSchema>;
 export type ProfileInput = z.infer<typeof profileSchema>;
 export type ProjectInput = z.infer<typeof projectSchema>;
+export type ProjectSettingsInput = z.infer<typeof projectSettingsSchema>;
 export type InvitationInput = z.infer<typeof invitationSchema>;
 export type TicketInput = z.infer<typeof ticketSchema>;
 export type CommentInput = z.infer<typeof commentSchema>;
 export type ChatInput = z.infer<typeof chatSchema>;
+export type DirectMessageInput = z.infer<typeof directMessageSchema>;

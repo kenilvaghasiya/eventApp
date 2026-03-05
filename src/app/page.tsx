@@ -1,12 +1,8 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { getEnv } from "@/lib/env";
 
 export default function LandingPage() {
-  if (getEnv().disableAuth) redirect("/dashboard");
-
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col justify-center px-6 py-20">
       <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">TaskFlow Pro</p>

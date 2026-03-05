@@ -15,15 +15,20 @@ import {
   invitationSchema,
   profileSchema,
   projectSchema,
+  projectSettingsSchema,
   ticketSchema,
+  directMessageSchema,
   type AuthInput,
   type ChatInput,
   type CommentInput,
+  type DirectMessageInput,
   type InvitationInput,
   type ProfileInput,
   type ProjectInput,
+  type ProjectSettingsInput,
   type TicketInput
 } from "@/lib/validations";
+import { ticketStatuses } from "@/lib/constants";
 
 function mapAuthError(message: string) {
   const value = message.toLowerCase();
@@ -55,15 +60,20 @@ async function ensureProfileExists(userId: string, fallbackName?: string | null)
   const { data: existing } = await supabase.from("profiles").select("id").eq("id", userId).maybeSingle();
   if (existing) return;
 
-  await supabase
+  const { error } = await supabase
     .from("profiles")
     .insert({ id: userId, display_name: fallbackName ?? null })
     .select("id")
     .maybeSingle();
+
+  if (error) {
+    throw new Error(
+      `Could not initialize profile for this user. Run the latest schema.sql (profiles trigger + profiles_insert_self policy). Details: ${error.message}`
+    );
+  }
 }
 
 async function resolveActorId() {
-  const env = getEnv();
   const supabase = await createSupabaseServerClient();
   const {
     data: { user }
@@ -74,18 +84,62 @@ async function resolveActorId() {
     return user.id;
   }
 
-  if (env.disableAuth && env.demoUserId) {
-    await ensureProfileExists(env.demoUserId, "Demo User");
-    return env.demoUserId;
-  }
-
   return null;
+}
+
+async function createNotifications(userIds: string[], type: string, referenceId?: string) {
+  const unique = Array.from(new Set(userIds.filter(Boolean)));
+  if (!unique.length) return;
+
+  const supabase = await createSupabaseServerClient();
+  const payload = unique.map((userId) => ({
+    user_id: userId,
+    type,
+    reference_id: referenceId ?? null
+  }));
+  await supabase.from("notifications").insert(payload);
+}
+
+function makeProjectKey(name: string, fallback = "PRJ") {
+  const letters = name
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 4);
+  return (letters || fallback).slice(0, 8);
+}
+
+async function syncPendingInvitationsForUser(userId: string, email?: string | null) {
+  if (!email) return;
+  const supabase = await createSupabaseServerClient();
+
+  const { data: invites } = await supabase
+    .from("invitations")
+    .select("id, project_id, role, accepted_at, expires_at")
+    .ilike("email", email);
+
+  if (!invites || invites.length === 0) return;
+
+  const now = Date.now();
+  for (const invite of invites) {
+    if (invite.accepted_at) continue;
+    if (new Date(invite.expires_at).getTime() < now) continue;
+
+    await supabase.from("project_members").upsert({
+      project_id: invite.project_id,
+      user_id: userId,
+      role: invite.role,
+      joined_at: new Date().toISOString()
+    });
+    await supabase.from("invitations").update({ accepted_at: new Date().toISOString() }).eq("id", invite.id);
+  }
 }
 
 export async function registerAction(input: AuthInput): Promise<ActionResult<null>> {
   return safeAction(async () => {
-    if (getEnv().disableAuth) return actionOk(null, "Authentication is disabled.");
-
     const parsed = authSchema.safeParse(input);
     if (!parsed.success) return actionErr(parsed.error.issues[0]?.message ?? "Invalid input", "VALIDATION");
 
@@ -104,28 +158,32 @@ export async function registerAction(input: AuthInput): Promise<ActionResult<nul
       return actionOk(null, "Account created. You can now login once email confirmation is disabled in Supabase.");
     }
 
+    if (data.user && data.session) {
+      await syncPendingInvitationsForUser(data.user.id, data.user.email ?? parsed.data.email);
+    }
+
     return actionOk(null, "Account created. Please login.");
   });
 }
 
 export async function loginAction(input: AuthInput): Promise<ActionResult<null>> {
   return safeAction(async () => {
-    if (getEnv().disableAuth) return actionOk(null, "Authentication is disabled.");
-
     const parsed = authSchema.safeParse(input);
     if (!parsed.success) return actionErr(parsed.error.issues[0]?.message ?? "Invalid input", "VALIDATION");
 
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.auth.signInWithPassword({ email: parsed.data.email, password: parsed.data.password });
     if (error) return actionErr(mapAuthError(error.message), "UNAUTHORIZED");
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+    if (user) await syncPendingInvitationsForUser(user.id, user.email ?? parsed.data.email);
     return actionOk(null, "Welcome back.");
   });
 }
 
 export async function loginWithGoogleAction(): Promise<ActionResult<{ url: string }>> {
   return safeAction(async () => {
-    if (getEnv().disableAuth) return actionErr("Authentication is disabled.");
-
     const baseUrl = await getRequestBaseUrl();
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -140,8 +198,6 @@ export async function loginWithGoogleAction(): Promise<ActionResult<{ url: strin
 
 export async function magicLinkAction(email: string): Promise<ActionResult<null>> {
   return safeAction(async () => {
-    if (getEnv().disableAuth) return actionErr("Authentication is disabled.");
-
     const parsedEmail = z.string().email("Please enter a valid email address.").safeParse(email);
     if (!parsedEmail.success) return actionErr(parsedEmail.error.issues[0]?.message ?? "Please enter your email.", "VALIDATION");
 
@@ -157,7 +213,6 @@ export async function magicLinkAction(email: string): Promise<ActionResult<null>
 }
 
 export async function logoutAction(): Promise<void> {
-  if (getEnv().disableAuth) return;
   const supabase = await createSupabaseServerClient();
   await supabase.auth.signOut();
 }
@@ -168,7 +223,7 @@ export async function updateProfileAction(input: ProfileInput): Promise<ActionRe
     if (!parsed.success) return actionErr(parsed.error.issues[0]?.message ?? "Invalid profile data", "VALIDATION");
 
     const actorId = await resolveActorId();
-    if (!actorId) return actionErr("No actor found. Set DEMO_USER_ID in env when authentication is disabled.", "UNAUTHORIZED");
+    if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
 
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase
@@ -192,7 +247,7 @@ export async function createProjectAction(input: ProjectInput): Promise<ActionRe
     if (!parsed.success) return actionErr(parsed.error.issues[0]?.message ?? "Invalid project data", "VALIDATION");
 
     const actorId = await resolveActorId();
-    if (!actorId) return actionErr("No actor found. Set DEMO_USER_ID in env when authentication is disabled.", "UNAUTHORIZED");
+    if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
 
     const supabase = await createSupabaseServerClient();
     const { data: project, error } = await supabase
@@ -200,17 +255,26 @@ export async function createProjectAction(input: ProjectInput): Promise<ActionRe
       .insert({
         name: parsed.data.name,
         description: parsed.data.description ?? null,
-        key_prefix: parsed.data.keyPrefix,
+        key_prefix: parsed.data.keyPrefix?.trim() ? parsed.data.keyPrefix : makeProjectKey(parsed.data.name),
         owner_id: actorId,
         color: parsed.data.color ?? null,
-        emoji: parsed.data.emoji ?? null,
+        emoji: parsed.data.emoji?.trim() ? parsed.data.emoji : null,
         start_date: parsed.data.startDate || null,
         end_date: parsed.data.endDate || null
       })
       .select("id")
       .single();
 
-    if (error || !project) return actionErr(error?.message ?? "Could not create project.");
+    if (error || !project) {
+      const message = error?.message ?? "Could not create project.";
+      
+      if (message.toLowerCase().includes("violates foreign key constraint") && message.includes("owner_id")) {
+        return actionErr(
+          "Profile record is missing for this account. Run schema.sql in Supabase and create a profile row for this user before creating a project."
+        );
+      }
+      return actionErr(`${message} (current user id: ${actorId})`);
+    }
 
     const { error: memberError } = await supabase.from("project_members").insert({
       project_id: project.id,
@@ -227,6 +291,7 @@ export async function createProjectAction(input: ProjectInput): Promise<ActionRe
     }
 
     revalidatePath("/dashboard");
+    await createNotifications([actorId], "project_created", project.id);
     return actionOk({ projectId: project.id }, "Project created.");
   });
 }
@@ -237,7 +302,7 @@ export async function inviteMemberAction(input: InvitationInput): Promise<Action
     if (!parsed.success) return actionErr(parsed.error.issues[0]?.message ?? "Invalid invite data", "VALIDATION");
 
     const actorId = await resolveActorId();
-    if (!actorId) return actionErr("No actor found. Set DEMO_USER_ID in env when authentication is disabled.", "UNAUTHORIZED");
+    if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
 
     const supabase = await createSupabaseServerClient();
     const token = randomUUID();
@@ -250,17 +315,45 @@ export async function inviteMemberAction(input: InvitationInput): Promise<Action
       expires_at: expires,
       invited_by: actorId
     });
-    if (error) return actionErr("Could not create invitation.");
+    if (error) return actionErr(`Could not create invitation: ${error.message}`);
+
+    // If invited email already belongs to an existing profile, auto-add to project now.
+    const { data: existingProfile } = await supabase
+      .from("profiles")
+      .select("id")
+      .ilike("email", parsed.data.email)
+      .maybeSingle();
+
+    if (existingProfile?.id) {
+      await supabase.from("project_members").upsert({
+        project_id: parsed.data.projectId,
+        user_id: existingProfile.id,
+        role: parsed.data.role,
+        joined_at: new Date().toISOString()
+      });
+
+      await supabase
+        .from("invitations")
+        .update({ accepted_at: new Date().toISOString() })
+        .eq("token", token);
+
+      await createNotifications([existingProfile.id], "project_invited", parsed.data.projectId);
+    }
 
     revalidatePath(`/projects/${parsed.data.projectId}/members`);
-    return actionOk({ token }, "Invitation created. Connect Resend to send email automatically.");
+    return actionOk(
+      { token },
+      existingProfile?.id
+        ? "Member already had an account and was added to the project."
+        : "Invitation created. User will join after signup/login using this email."
+    );
   });
 }
 
 export async function acceptInvitationAction(token: string): Promise<ActionResult<{ projectId: string }>> {
   return safeAction(async () => {
     const actorId = await resolveActorId();
-    if (!actorId) return actionErr("No actor found. Set DEMO_USER_ID in env when authentication is disabled.", "UNAUTHORIZED");
+    if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
 
     const supabase = await createSupabaseServerClient();
     const { data: invite } = await supabase.from("invitations").select("*").eq("token", token).maybeSingle();
@@ -278,6 +371,7 @@ export async function acceptInvitationAction(token: string): Promise<ActionResul
     await supabase.from("invitations").update({ accepted_at: new Date().toISOString() }).eq("id", invite.id);
 
     revalidatePath("/dashboard");
+    await createNotifications([invite.invited_by], "invite_accepted", invite.project_id);
     return actionOk({ projectId: invite.project_id }, "Invitation accepted.");
   });
 }
@@ -288,7 +382,7 @@ export async function createTicketAction(input: TicketInput): Promise<ActionResu
     if (!parsed.success) return actionErr(parsed.error.issues[0]?.message ?? "Invalid ticket data", "VALIDATION");
 
     const actorId = await resolveActorId();
-    if (!actorId) return actionErr("No actor found. Set DEMO_USER_ID in env when authentication is disabled.", "UNAUTHORIZED");
+    if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
 
     const supabase = await createSupabaseServerClient();
     const { data: ticket, error } = await supabase
@@ -309,6 +403,10 @@ export async function createTicketAction(input: TicketInput): Promise<ActionResu
       .single();
 
     if (error || !ticket) return actionErr("Could not create ticket.");
+    if (parsed.data.assigneeId && parsed.data.assigneeId !== actorId) {
+      await createNotifications([parsed.data.assigneeId], "ticket_assigned", parsed.data.projectId);
+    }
+    await createNotifications([actorId], "ticket_created", parsed.data.projectId);
     revalidatePath(`/projects/${parsed.data.projectId}/tickets`);
     return actionOk({ ticketId: ticket.id }, "Ticket created.");
   });
@@ -350,7 +448,7 @@ export async function createCommentAction(input: CommentInput): Promise<ActionRe
     if (!parsed.success) return actionErr(parsed.error.issues[0]?.message ?? "Invalid comment.", "VALIDATION");
 
     const actorId = await resolveActorId();
-    if (!actorId) return actionErr("No actor found. Set DEMO_USER_ID in env when authentication is disabled.", "UNAUTHORIZED");
+    if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
 
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.from("comments").insert({
@@ -360,6 +458,15 @@ export async function createCommentAction(input: CommentInput): Promise<ActionRe
     });
 
     if (error) return actionErr("Could not post comment.");
+    const { data: ticket } = await supabase
+      .from("tickets")
+      .select("project_id, reporter_id, assignee_id")
+      .eq("id", parsed.data.ticketId)
+      .maybeSingle();
+    if (ticket) {
+      const targets = [ticket.reporter_id, ticket.assignee_id].filter((id): id is string => !!id && id !== actorId);
+      await createNotifications(targets, "ticket_commented", ticket.project_id);
+    }
     return actionOk(null, "Comment added.");
   });
 }
@@ -370,7 +477,7 @@ export async function sendChatMessageAction(input: ChatInput): Promise<ActionRes
     if (!parsed.success) return actionErr(parsed.error.issues[0]?.message ?? "Invalid message.", "VALIDATION");
 
     const actorId = await resolveActorId();
-    if (!actorId) return actionErr("No actor found. Set DEMO_USER_ID in env when authentication is disabled.", "UNAUTHORIZED");
+    if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
 
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.from("chat_messages").insert({
@@ -380,6 +487,11 @@ export async function sendChatMessageAction(input: ChatInput): Promise<ActionRes
     });
 
     if (error) return actionErr("Could not send message.");
+    const { data: members } = await supabase.from("project_members").select("user_id").eq("project_id", parsed.data.projectId);
+    if (members?.length) {
+      const targets = members.map((member) => member.user_id).filter((id) => id !== actorId);
+      await createNotifications(targets, "project_chat_message", parsed.data.projectId);
+    }
     revalidatePath(`/projects/${parsed.data.projectId}/chat`);
     return actionOk(null, "Message sent.");
   });
@@ -388,12 +500,142 @@ export async function sendChatMessageAction(input: ChatInput): Promise<ActionRes
 export async function markAllNotificationsReadAction(): Promise<ActionResult<null>> {
   return safeAction(async () => {
     const actorId = await resolveActorId();
-    if (!actorId) return actionErr("No actor found. Set DEMO_USER_ID in env when authentication is disabled.", "UNAUTHORIZED");
+    if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
 
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.from("notifications").update({ read: true }).eq("user_id", actorId).eq("read", false);
     if (error) return actionErr("Could not update notifications.");
     revalidatePath("/notifications");
     return actionOk(null, "All notifications marked as read.");
+  });
+}
+
+export async function updateTicketStatusAction(input: {
+  projectId: string;
+  ticketId: string;
+  status: (typeof ticketStatuses)[number];
+}): Promise<ActionResult<null>> {
+  return safeAction(async () => {
+    if (!input.projectId || !input.ticketId || !ticketStatuses.includes(input.status)) {
+      return actionErr("Invalid status update payload.", "VALIDATION");
+    }
+
+    const actorId = await resolveActorId();
+    if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
+
+    const supabase = await createSupabaseServerClient();
+    const { error } = await supabase
+      .from("tickets")
+      .update({ status: input.status })
+      .eq("id", input.ticketId)
+      .eq("project_id", input.projectId);
+
+    if (error) return actionErr(`Could not update ticket status: ${error.message}`);
+
+    const { data: notifyTicket } = await supabase
+      .from("tickets")
+      .select("reporter_id, assignee_id")
+      .eq("id", input.ticketId)
+      .eq("project_id", input.projectId)
+      .maybeSingle();
+    if (notifyTicket) {
+      const targets = [notifyTicket.reporter_id, notifyTicket.assignee_id].filter((id): id is string => !!id && id !== actorId);
+      await createNotifications(targets, "ticket_status_changed", input.projectId);
+    }
+
+    revalidatePath(`/projects/${input.projectId}/board`);
+    revalidatePath(`/projects/${input.projectId}/tickets`);
+    return actionOk(null, "Ticket status updated.");
+  });
+}
+
+export async function updateProjectSettingsAction(input: ProjectSettingsInput): Promise<ActionResult<null>> {
+  return safeAction(async () => {
+    const parsed = projectSettingsSchema.safeParse(input);
+    if (!parsed.success) return actionErr(parsed.error.issues[0]?.message ?? "Invalid project data.", "VALIDATION");
+
+    const actorId = await resolveActorId();
+    if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
+
+    const supabase = await createSupabaseServerClient();
+    const { data: project } = await supabase.from("projects").select("owner_id").eq("id", parsed.data.id).maybeSingle();
+    if (!project) return actionErr("Project not found.", "NOT_FOUND");
+    if (project.owner_id !== actorId) return actionErr("Only owner can update project settings.", "FORBIDDEN");
+
+    const { error } = await supabase
+      .from("projects")
+      .update({
+        name: parsed.data.name,
+        description: parsed.data.description ?? null,
+        color: parsed.data.color ?? null,
+        start_date: parsed.data.startDate || null,
+        end_date: parsed.data.endDate || null
+      })
+      .eq("id", parsed.data.id);
+    if (error) return actionErr(`Could not update project: ${error.message}`);
+
+    revalidatePath(`/projects/${parsed.data.id}`);
+    revalidatePath(`/projects/${parsed.data.id}/settings`);
+    revalidatePath("/dashboard");
+    return actionOk(null, "Project updated.");
+  });
+}
+
+export async function deleteProjectAction(projectId: string): Promise<ActionResult<null>> {
+  return safeAction(async () => {
+    if (!projectId) return actionErr("Project id is required.", "VALIDATION");
+
+    const actorId = await resolveActorId();
+    if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
+
+    const supabase = await createSupabaseServerClient();
+    const { data: project } = await supabase.from("projects").select("owner_id").eq("id", projectId).maybeSingle();
+    if (!project) return actionErr("Project not found.", "NOT_FOUND");
+    if (project.owner_id !== actorId) return actionErr("Only owner can delete project.", "FORBIDDEN");
+
+    // Clean project-scoped notifications that use reference_id = projectId.
+    await supabase.from("notifications").delete().eq("reference_id", projectId);
+
+    const { error } = await supabase.from("projects").delete().eq("id", projectId);
+    if (error) return actionErr(`Could not delete project: ${error.message}`);
+
+    revalidatePath("/dashboard");
+    return actionOk(null, "Project deleted with all related data.");
+  });
+}
+
+export async function sendDirectMessageAction(input: DirectMessageInput): Promise<ActionResult<null>> {
+  return safeAction(async () => {
+    const parsed = directMessageSchema.safeParse(input);
+    if (!parsed.success) return actionErr(parsed.error.issues[0]?.message ?? "Invalid message.", "VALIDATION");
+
+    const actorId = await resolveActorId();
+    if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
+
+    const supabase = await createSupabaseServerClient();
+    const { error } = await supabase.from("direct_messages").insert({
+      sender_id: actorId,
+      recipient_id: parsed.data.recipientId,
+      body: parsed.data.body
+    });
+    if (error) return actionErr(`Could not send direct message: ${error.message}`);
+
+    await createNotifications([parsed.data.recipientId], "direct_message", actorId);
+
+    revalidatePath("/messages");
+    revalidatePath(`/messages/${parsed.data.recipientId}`);
+    return actionOk(null, "Message sent.");
+  });
+}
+
+export async function touchPresenceAction(): Promise<ActionResult<null>> {
+  return safeAction(async () => {
+    const actorId = await resolveActorId();
+    if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
+
+    const supabase = await createSupabaseServerClient();
+    const { error } = await supabase.from("profiles").update({ last_seen_at: new Date().toISOString() }).eq("id", actorId);
+    if (error) return actionErr(`Could not update presence: ${error.message}`);
+    return actionOk(null);
   });
 }

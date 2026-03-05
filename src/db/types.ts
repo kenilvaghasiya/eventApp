@@ -6,25 +6,31 @@ export type Database = {
       profiles: {
         Row: {
           id: string;
+          email: string | null;
           display_name: string | null;
           avatar_url: string | null;
           bio: string | null;
           timezone: string | null;
+          last_seen_at: string;
           created_at: string;
         };
         Insert: {
           id: string;
+          email?: string | null;
           display_name?: string | null;
           avatar_url?: string | null;
           bio?: string | null;
           timezone?: string | null;
+          last_seen_at?: string;
           created_at?: string;
         };
         Update: {
+          email?: string | null;
           display_name?: string | null;
           avatar_url?: string | null;
           bio?: string | null;
           timezone?: string | null;
+          last_seen_at?: string;
         };
         Relationships: [];
       };
@@ -233,6 +239,29 @@ export type Database = {
         };
         Update: {
           read?: boolean;
+        };
+        Relationships: [];
+      };
+      direct_messages: {
+        Row: {
+          id: string;
+          sender_id: string;
+          recipient_id: string;
+          body: string;
+          read_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          sender_id: string;
+          recipient_id: string;
+          body: string;
+          read_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          body?: string;
+          read_at?: string | null;
         };
         Relationships: [];
       };
