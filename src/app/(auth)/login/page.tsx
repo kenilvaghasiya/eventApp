@@ -8,7 +8,7 @@ export default function LoginPage() {
     <Card className="w-full max-w-md">
       <CardHeader>
         <CardTitle>Welcome back</CardTitle>
-        <CardDescription>Sign in using email/password, Google, or magic link.</CardDescription>
+        <CardDescription>Sign in</CardDescription>
       </CardHeader>
       <CardContent>
         <Suspense fallback={<p className="text-sm text-muted-foreground">Loading login...</p>}>

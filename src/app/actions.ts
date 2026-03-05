@@ -2,6 +2,8 @@
 
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { z } from "zod";
 
 import { actionErr, actionOk, safeAction, type ActionResult } from "@/lib/action";
 import { getEnv } from "@/lib/env";
@@ -34,15 +36,56 @@ function mapAuthError(message: string) {
   return `Authentication failed: ${message}`;
 }
 
+async function getRequestBaseUrl() {
+  const env = getEnv();
+  const headerStore = await headers();
+  const forwardedHost = headerStore.get("x-forwarded-host");
+  const host = forwardedHost ?? headerStore.get("host");
+  const proto = headerStore.get("x-forwarded-proto") ?? "https";
+
+  if (host) {
+    return `${proto}://${host}`;
+  }
+
+  return env.appUrl;
+}
+
+async function ensureProfileExists(userId: string, fallbackName?: string | null) {
+  const supabase = await createSupabaseServerClient();
+  const { data: existing } = await supabase.from("profiles").select("id").eq("id", userId).maybeSingle();
+  if (existing) return;
+
+  await supabase
+    .from("profiles")
+    .insert({ id: userId, display_name: fallbackName ?? null })
+    .select("id")
+    .maybeSingle();
+}
+
 export async function registerAction(input: AuthInput): Promise<ActionResult<null>> {
   return safeAction(async () => {
     const parsed = authSchema.safeParse(input);
     if (!parsed.success) return actionErr(parsed.error.issues[0]?.message ?? "Invalid input", "VALIDATION");
 
+    const baseUrl = await getRequestBaseUrl();
     const supabase = await createSupabaseServerClient();
-    const { error } = await supabase.auth.signUp({ email: parsed.data.email, password: parsed.data.password });
+    const { data, error } = await supabase.auth.signUp({
+      email: parsed.data.email,
+      password: parsed.data.password,
+      options: {
+        emailRedirectTo: `${baseUrl}/auth/callback`
+      }
+    });
     if (error) return actionErr(mapAuthError(error.message));
-    return actionOk(null, "Account created. Check your inbox for verification.");
+
+    if (data.user && !data.session) {
+      return actionOk(
+        null,
+        "Account created. Please verify your email before login. If no email arrives, check spam or disable email confirmation in Supabase for testing."
+      );
+    }
+
+    return actionOk(null, "Account created successfully.");
   });
 }
 
@@ -60,11 +103,11 @@ export async function loginAction(input: AuthInput): Promise<ActionResult<null>>
 
 export async function loginWithGoogleAction(): Promise<ActionResult<{ url: string }>> {
   return safeAction(async () => {
-    const env = getEnv();
+    const baseUrl = await getRequestBaseUrl();
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${env.appUrl}/auth/callback` }
+      options: { redirectTo: `${baseUrl}/auth/callback` }
     });
 
     if (error || !data.url) return actionErr("Unable to start Google login.");
@@ -74,11 +117,16 @@ export async function loginWithGoogleAction(): Promise<ActionResult<{ url: strin
 
 export async function magicLinkAction(email: string): Promise<ActionResult<null>> {
   return safeAction(async () => {
-    if (!email) return actionErr("Please enter your email.", "VALIDATION");
-    const env = getEnv();
+    const parsedEmail = z.string().email("Please enter a valid email address.").safeParse(email);
+    if (!parsedEmail.success) return actionErr(parsedEmail.error.issues[0]?.message ?? "Please enter your email.", "VALIDATION");
+
+    const baseUrl = await getRequestBaseUrl();
     const supabase = await createSupabaseServerClient();
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${env.appUrl}/dashboard` } });
-    if (error) return actionErr("Could not send magic link.");
+    const { error } = await supabase.auth.signInWithOtp({
+      email: parsedEmail.data,
+      options: { emailRedirectTo: `${baseUrl}/auth/callback?next=/dashboard` }
+    });
+    if (error) return actionErr(`Could not send magic link: ${error.message}`);
     return actionOk(null, "Magic link sent to your email.");
   });
 }
@@ -98,6 +146,7 @@ export async function updateProfileAction(input: ProfileInput): Promise<ActionRe
       data: { user }
     } = await supabase.auth.getUser();
     if (!user) return actionErr("Please login again.", "UNAUTHORIZED");
+    await ensureProfileExists(user.id, user.user_metadata?.full_name ?? user.email ?? null);
 
     const { error } = await supabase
       .from("profiles")
@@ -140,14 +189,21 @@ export async function createProjectAction(input: ProjectInput): Promise<ActionRe
       .select("id")
       .single();
 
-    if (error || !project) return actionErr("Could not create project.");
+    if (error || !project) return actionErr(error?.message ?? "Could not create project.");
 
-    await supabase.from("project_members").insert({
+    const { error: memberError } = await supabase.from("project_members").insert({
       project_id: project.id,
       user_id: user.id,
       role: "owner",
       joined_at: new Date().toISOString()
     });
+    if (memberError) {
+      await supabase.from("projects").delete().eq("id", project.id);
+      return actionErr(
+        `Project was created but owner membership failed: ${memberError.message}. Update project_members RLS policy for owner insert.`,
+        "FORBIDDEN"
+      );
+    }
 
     revalidatePath("/dashboard");
     return actionOk({ projectId: project.id }, "Project created.");

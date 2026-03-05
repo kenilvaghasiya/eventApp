@@ -164,6 +164,7 @@ alter table public.chat_messages enable row level security;
 alter table public.notifications enable row level security;
 
 create policy "profiles_select_auth" on public.profiles for select to authenticated using (true);
+create policy "profiles_insert_self" on public.profiles for insert to authenticated with check (id = auth.uid());
 create policy "profiles_update_self" on public.profiles for update to authenticated using (id = auth.uid());
 
 create policy "projects_select_member" on public.projects for select to authenticated using (
@@ -177,7 +178,12 @@ create policy "members_select_member" on public.project_members for select to au
   exists (select 1 from public.project_members m where m.project_id = project_id and m.user_id = auth.uid())
 );
 create policy "members_insert_admin" on public.project_members for insert to authenticated with check (
-  exists (
+  (
+    user_id = auth.uid() and exists (
+      select 1 from public.projects p
+      where p.id = project_id and p.owner_id = auth.uid()
+    )
+  ) or exists (
     select 1 from public.project_members m
     where m.project_id = project_id and m.user_id = auth.uid() and m.role in ('owner', 'admin')
   )
