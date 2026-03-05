@@ -7,7 +7,7 @@ import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
-import { loginAction, loginWithGoogleAction, magicLinkAction } from "@/app/actions";
+import { loginAction, loginWithGoogleAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -52,18 +52,6 @@ export function LoginForm() {
         return;
       }
       window.location.href = result.data.url;
-    });
-  };
-
-  const onMagicLink = () => {
-    const email = form.getValues("email");
-    startTransition(async () => {
-      const result = await magicLinkAction(email);
-      if (!result.ok) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success(result.message ?? "Magic link sent");
     });
   };
 
@@ -120,10 +108,6 @@ export function LoginForm() {
         <Button type="button" variant="outline" className="w-full" onClick={onGoogle} disabled={isPending}>
           <GoogleIcon />
           Continue with Google
-        </Button>
-
-        <Button type="button" variant="ghost" className="w-full" onClick={onMagicLink} disabled={isPending}>
-          Send magic link
         </Button>
 
         <p className="text-center text-sm text-muted-foreground">

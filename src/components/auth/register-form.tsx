@@ -31,7 +31,8 @@ export function RegisterForm() {
         return;
       }
       toast.success(result.message ?? "Account created");
-      router.push("/login");
+      router.push("/dashboard");
+      router.refresh();
     });
   };
 

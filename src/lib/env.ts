@@ -4,7 +4,9 @@ export function getEnv() {
     supabaseAnon:
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY,
     appUrl: process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
-    resendApiKey: process.env.RESEND_API_KEY
+    resendApiKey: process.env.RESEND_API_KEY,
+    disableAuth: process.env.NEXT_PUBLIC_DISABLE_AUTH === "true",
+    demoUserId: process.env.DEMO_USER_ID
   };
 }
 

@@ -1,6 +1,7 @@
 import type { User } from "@supabase/supabase-js";
 
 import type { Database } from "@/db/types";
+import { getEnv } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type ProjectRow = Database["public"]["Tables"]["projects"]["Row"];
@@ -14,6 +15,7 @@ type CommentWithProfile = Database["public"]["Tables"]["comments"]["Row"] & { pr
 type ChatWithProfile = Database["public"]["Tables"]["chat_messages"]["Row"] & { profiles: MemberProfile | null };
 
 export async function getCurrentUser(): Promise<User | null> {
+  if (getEnv().disableAuth) return null;
   const supabase = await createSupabaseServerClient();
   const {
     data: { user }
@@ -21,12 +23,20 @@ export async function getCurrentUser(): Promise<User | null> {
   return user;
 }
 
+async function getActorIdForReads() {
+  const env = getEnv();
+  const user = await getCurrentUser();
+  if (user) return user.id;
+  if (env.disableAuth && env.demoUserId) return env.demoUserId;
+  return null;
+}
+
 export async function getMyProjects(): Promise<Array<ProjectRow & { role: ProjectMemberRow["role"] }>> {
   const supabase = await createSupabaseServerClient();
-  const user = await getCurrentUser();
-  if (!user) return [];
+  const actorId = await getActorIdForReads();
+  if (!actorId) return [];
 
-  const { data: memberRows } = await supabase.from("project_members").select("project_id, role").eq("user_id", user.id);
+  const { data: memberRows } = await supabase.from("project_members").select("project_id, role").eq("user_id", actorId);
   if (!memberRows || memberRows.length === 0) return [];
 
   const projectIds = memberRows.map((member) => member.project_id);
@@ -46,14 +56,14 @@ export async function getMyProjects(): Promise<Array<ProjectRow & { role: Projec
 
 export async function getProjectById(projectId: string): Promise<(ProjectRow & { role: ProjectMemberRow["role"] }) | null> {
   const supabase = await createSupabaseServerClient();
-  const user = await getCurrentUser();
-  if (!user) return null;
+  const actorId = await getActorIdForReads();
+  if (!actorId) return null;
 
   const { data: membership } = await supabase
     .from("project_members")
     .select("role")
     .eq("project_id", projectId)
-    .eq("user_id", user.id)
+    .eq("user_id", actorId)
     .maybeSingle();
   if (!membership) return null;
 
@@ -145,13 +155,13 @@ export async function getProjectChat(projectId: string): Promise<ChatWithProfile
 
 export async function getMyNotifications(): Promise<NotificationRow[]> {
   const supabase = await createSupabaseServerClient();
-  const user = await getCurrentUser();
-  if (!user) return [];
+  const actorId = await getActorIdForReads();
+  if (!actorId) return [];
 
   const { data } = await supabase
     .from("notifications")
     .select("id, user_id, type, reference_id, read, created_at")
-    .eq("user_id", user.id)
+    .eq("user_id", actorId)
     .order("created_at", { ascending: false });
   return data ?? [];
 }
