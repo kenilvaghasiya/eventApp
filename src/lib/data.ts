@@ -7,6 +7,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 type ProjectRow = Database["public"]["Tables"]["projects"]["Row"];
 type ProjectMemberRow = Database["public"]["Tables"]["project_members"]["Row"];
 type TicketRow = Database["public"]["Tables"]["tickets"]["Row"];
+type TicketAttachmentRow = Database["public"]["Tables"]["ticket_attachments"]["Row"];
 type NotificationRow = Database["public"]["Tables"]["notifications"]["Row"];
 type DirectMessageRow = Database["public"]["Tables"]["direct_messages"]["Row"];
 type SprintRow = Database["public"]["Tables"]["sprints"]["Row"];
@@ -15,6 +16,7 @@ type MemberProfile = { display_name: string | null; avatar_url?: string | null }
 type MemberWithProfile = ProjectMemberRow & { profiles: MemberProfile | null };
 type CommentWithProfile = Database["public"]["Tables"]["comments"]["Row"] & { profiles: MemberProfile | null };
 type ChatWithProfile = Database["public"]["Tables"]["chat_messages"]["Row"] & { profiles: MemberProfile | null };
+type AttachmentWithProfile = TicketAttachmentRow & { profiles: MemberProfile | null };
 
 export async function getCurrentUser(): Promise<User | null> {
   const supabase = await createSupabaseServerClient();
@@ -135,7 +137,7 @@ export async function getTicketDetails(projectId: string, ticketId: string) {
     .maybeSingle();
   if (!ticket) return null;
 
-  const [commentsRes, activityRes] = await Promise.all([
+  const [commentsRes, activityRes, attachmentsRes] = await Promise.all([
     supabase
       .from("comments")
       .select("id, ticket_id, author_id, body, edited_at, created_at, profiles:author_id(display_name, avatar_url)")
@@ -146,13 +148,19 @@ export async function getTicketDetails(projectId: string, ticketId: string) {
       .select("id, project_id, sender_id, body, file_url, created_at, profiles:sender_id(display_name, avatar_url)")
       .eq("project_id", projectId)
       .order("created_at", { ascending: false })
-      .limit(10)
+      .limit(10),
+    supabase
+      .from("ticket_attachments")
+      .select("id, ticket_id, uploaded_by, file_name, file_url, storage_path, content_type, file_size, created_at, profiles:uploaded_by(display_name, avatar_url)")
+      .eq("ticket_id", ticketId)
+      .order("created_at", { ascending: false })
   ]);
 
   return {
     ticket,
     comments: (commentsRes.data as CommentWithProfile[] | null) ?? [],
-    recentChat: (activityRes.data as ChatWithProfile[] | null) ?? []
+    recentChat: (activityRes.data as ChatWithProfile[] | null) ?? [],
+    attachments: (attachmentsRes.data as AttachmentWithProfile[] | null) ?? []
   };
 }
 

@@ -12,8 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { labelize, ticketPriorities, ticketStatuses, ticketTypes } from "@/lib/constants";
 import { ticketSchema, type TicketInput } from "@/lib/validations";
 
@@ -128,7 +128,11 @@ export function TicketRowActions({ projectId, ticket, assignees }: Props) {
                       <FormItem>
                         <FormLabel>Description</FormLabel>
                         <FormControl>
-                          <Textarea rows={5} {...field} value={field.value ?? ""} />
+                          <RichTextEditor
+                            value={field.value ?? ""}
+                            onChange={field.onChange}
+                            placeholder="Update description with rich text..."
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

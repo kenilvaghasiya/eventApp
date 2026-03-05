@@ -55,3 +55,36 @@ body {
   background: #94a3b8;
   border-radius: 9999px;
 }
+
+.rte-editor:empty:before {
+  content: attr(data-placeholder);
+  color: #94a3b8;
+}
+
+.rich-text-content p {
+  margin: 0.35rem 0;
+}
+
+.rich-text-content ul {
+  list-style: disc;
+  margin: 0.35rem 0;
+  padding-left: 1.25rem;
+}
+
+.rich-text-content ol {
+  list-style: decimal;
+  margin: 0.35rem 0;
+  padding-left: 1.25rem;
+}
+
+.rich-text-content blockquote {
+  margin: 0.5rem 0;
+  border-left: 3px solid #cbd5e1;
+  padding-left: 0.75rem;
+  color: #64748b;
+}
+
+.rich-text-content a {
+  color: #2563eb;
+  text-decoration: underline;
+}

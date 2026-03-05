@@ -9,22 +9,26 @@ import { QuickAddTicketModal } from "@/components/tickets/quick-add-ticket-modal
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { labelize, ticketStatuses } from "@/lib/constants";
+import { richTextToPlain } from "@/lib/rich-text";
 
 type Ticket = {
   id: string;
   title: string;
+  description: string | null;
   status: (typeof ticketStatuses)[number];
   priority: string;
   ticket_number: number;
+  assignee_id: string | null;
 };
 
 type Props = {
   projectId: string;
   initialTickets: Ticket[];
   assignees: Array<{ id: string; display_name: string | null }>;
+  assigneeDirectory: Record<string, { name: string | null; avatarUrl: string | null }>;
 };
 
-export function BoardDnd({ projectId, initialTickets, assignees }: Props) {
+export function BoardDnd({ projectId, initialTickets, assignees, assigneeDirectory }: Props) {
   const [tickets, setTickets] = useState(initialTickets);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [hoverStatus, setHoverStatus] = useState<(typeof ticketStatuses)[number] | null>(null);
@@ -127,9 +131,32 @@ export function BoardDnd({ projectId, initialTickets, assignees }: Props) {
                   <Link href={`/projects/${projectId}/tickets/${ticket.id}`} className="block hover:underline">
                     <p className="line-clamp-2 font-medium text-slate-800">{ticket.title}</p>
                   </Link>
+                  <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+                    {richTextToPlain(ticket.description) || "No description"}
+                  </p>
                   <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
                     <span className="font-semibold text-slate-600">ISSUE-{ticket.ticket_number}</span>
                     <Badge className={priorityClass(ticket.priority)}>{labelize(ticket.priority)}</Badge>
+                  </div>
+                  <div className="mt-2 flex items-center justify-end">
+                    {ticket.assignee_id && assigneeDirectory[ticket.assignee_id] ? (
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-6 overflow-hidden rounded-full border border-slate-200 bg-white">
+                          {assigneeDirectory[ticket.assignee_id].avatarUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={assigneeDirectory[ticket.assignee_id].avatarUrl || undefined}
+                              alt={assigneeDirectory[ticket.assignee_id].name || "Assignee"}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold text-slate-500">
+                              {(assigneeDirectory[ticket.assignee_id].name || "U").slice(0, 1).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ))}

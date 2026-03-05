@@ -31,6 +31,7 @@ import {
   type TicketInput
 } from "@/lib/validations";
 import { ticketStatuses } from "@/lib/constants";
+import { sanitizeRichTextHtml } from "@/lib/rich-text";
 
 function mapAuthError(message: string) {
   const value = message.toLowerCase();
@@ -250,6 +251,55 @@ export async function updateProfileAction(input: ProfileInput): Promise<ActionRe
   });
 }
 
+export async function uploadProfileAvatarAction(formData: FormData): Promise<ActionResult<{ avatarUrl: string }>> {
+  return safeAction(async () => {
+    const actorId = await resolveActorId();
+    if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
+
+    const avatar = formData.get("avatar");
+    if (!(avatar instanceof File)) {
+      return actionErr("Please choose an image file.", "VALIDATION");
+    }
+
+    if (!avatar.type.startsWith("image/")) {
+      return actionErr("Only image files are allowed.", "VALIDATION");
+    }
+
+    const maxBytes = 5 * 1024 * 1024;
+    if (avatar.size > maxBytes) {
+      return actionErr("Image size must be 5MB or less.", "VALIDATION");
+    }
+
+    const ext = (avatar.name.split(".").pop() || "jpg").toLowerCase();
+    const path = `${actorId}/avatar.${ext}`;
+    const buffer = Buffer.from(await avatar.arrayBuffer());
+
+    const supabase = await createSupabaseServerClient();
+    const { error: uploadError } = await supabase.storage.from("profile-images").upload(path, buffer, {
+      contentType: avatar.type,
+      upsert: true
+    });
+    if (uploadError) {
+      if (uploadError.message.toLowerCase().includes("row-level security")) {
+        return actionErr(
+          "Profile image upload is blocked by Supabase Storage policy. Run the profile-images storage policies from src/db/schema.sql, then try again."
+        );
+      }
+      return actionErr(`Could not upload avatar: ${uploadError.message}`);
+    }
+
+    const { data: publicData } = supabase.storage.from("profile-images").getPublicUrl(path);
+    const avatarUrl = `${publicData.publicUrl}?t=${Date.now()}`;
+
+    const { error: profileError } = await supabase.from("profiles").update({ avatar_url: avatarUrl }).eq("id", actorId);
+    if (profileError) return actionErr(`Avatar uploaded but profile update failed: ${profileError.message}`);
+
+    revalidatePath("/profile");
+    revalidatePath("/messages");
+    return actionOk({ avatarUrl }, "Profile image updated.");
+  });
+}
+
 export async function createProjectAction(input: ProjectInput): Promise<ActionResult<{ projectId: string }>> {
   return safeAction(async () => {
     const parsed = projectSchema.safeParse(input);
@@ -433,12 +483,13 @@ export async function createTicketAction(input: TicketInput): Promise<ActionResu
     if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
 
     const supabase = await createSupabaseServerClient();
+    const safeDescription = sanitizeRichTextHtml(parsed.data.description ?? null) || null;
     const { data: ticket, error } = await supabase
       .from("tickets")
       .insert({
         project_id: parsed.data.projectId,
         title: parsed.data.title,
-        description: parsed.data.description ?? null,
+        description: safeDescription,
         status: parsed.data.status,
         priority: parsed.data.priority,
         type: parsed.data.type,
@@ -460,6 +511,201 @@ export async function createTicketAction(input: TicketInput): Promise<ActionResu
   });
 }
 
+export async function uploadTicketAttachmentsAction(formData: FormData): Promise<ActionResult<{ uploaded: number }>> {
+  return safeAction(async () => {
+    const projectId = String(formData.get("projectId") ?? "");
+    const ticketId = String(formData.get("ticketId") ?? "");
+    if (!projectId || !ticketId) return actionErr("Project and ticket are required.", "VALIDATION");
+
+    const files = formData.getAll("files").filter((file): file is File => file instanceof File);
+    if (!files.length) return actionErr("Please choose at least one file.", "VALIDATION");
+
+    const actorId = await resolveActorId();
+    if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
+
+    const supabase = await createSupabaseServerClient();
+    const { data: membership } = await supabase
+      .from("project_members")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("user_id", actorId)
+      .maybeSingle();
+    if (!membership) return actionErr("You do not have access to upload files to this project.", "FORBIDDEN");
+
+    const { data: ticket } = await supabase
+      .from("tickets")
+      .select("id")
+      .eq("id", ticketId)
+      .eq("project_id", projectId)
+      .maybeSingle();
+    if (!ticket) return actionErr("Ticket not found.", "NOT_FOUND");
+
+    let uploaded = 0;
+
+    for (const file of files) {
+      if (file.size > 25 * 1024 * 1024) {
+        return actionErr(`File ${file.name} is too large. Max 25MB per file.`);
+      }
+
+      const cleanedName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${projectId}/${ticketId}/${Date.now()}-${randomUUID()}-${cleanedName}`;
+      const buffer = Buffer.from(await file.arrayBuffer());
+
+      const { error: uploadError } = await supabase.storage.from("ticket-attachments").upload(path, buffer, {
+        contentType: file.type || "application/octet-stream",
+        upsert: false
+      });
+      if (uploadError) {
+        if (uploadError.message.toLowerCase().includes("row-level security")) {
+          return actionErr("Attachment upload is blocked by Supabase Storage policy. Run ticket-attachments policies from schema.sql.");
+        }
+        return actionErr(`Could not upload ${file.name}: ${uploadError.message}`);
+      }
+
+      const { data: publicData } = supabase.storage.from("ticket-attachments").getPublicUrl(path);
+      const { error: insertError } = await supabase.from("ticket_attachments").insert({
+        ticket_id: ticketId,
+        uploaded_by: actorId,
+        file_name: file.name,
+        file_url: publicData.publicUrl,
+        storage_path: path,
+        content_type: file.type || null,
+        file_size: file.size
+      });
+      if (insertError) return actionErr(`File uploaded but metadata save failed: ${insertError.message}`);
+
+      uploaded += 1;
+    }
+
+    revalidatePath(`/projects/${projectId}/tickets/${ticketId}`);
+    return actionOk({ uploaded }, `${uploaded} file(s) uploaded.`);
+  });
+}
+
+export async function updateTicketAttachmentAction(formData: FormData): Promise<ActionResult<null>> {
+  return safeAction(async () => {
+    const projectId = String(formData.get("projectId") ?? "");
+    const ticketId = String(formData.get("ticketId") ?? "");
+    const attachmentId = String(formData.get("attachmentId") ?? "");
+    const fileName = String(formData.get("fileName") ?? "").trim();
+    const replacement = formData.get("file");
+
+    if (!projectId || !ticketId || !attachmentId) return actionErr("Invalid attachment request.", "VALIDATION");
+
+    const actorId = await resolveActorId();
+    if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
+
+    const supabase = await createSupabaseServerClient();
+    const { data: member } = await supabase
+      .from("project_members")
+      .select("role")
+      .eq("project_id", projectId)
+      .eq("user_id", actorId)
+      .maybeSingle();
+    if (!member) return actionErr("You do not have access to this project.", "FORBIDDEN");
+
+    const { data: attachment } = await supabase
+      .from("ticket_attachments")
+      .select("id, ticket_id, uploaded_by, storage_path, file_name")
+      .eq("id", attachmentId)
+      .eq("ticket_id", ticketId)
+      .maybeSingle();
+    if (!attachment) return actionErr("Attachment not found.", "NOT_FOUND");
+
+    const canManage = attachment.uploaded_by === actorId || member.role === "owner" || member.role === "admin";
+    if (!canManage) return actionErr("Only uploader, owner, or admin can edit this file.", "FORBIDDEN");
+
+    let nextStoragePath = attachment.storage_path;
+    let nextFileUrl: string | undefined;
+    let nextContentType: string | null | undefined;
+    let nextFileSize: number | null | undefined;
+    let nextFileName = fileName || attachment.file_name;
+
+    if (replacement instanceof File && replacement.size > 0) {
+      if (replacement.size > 25 * 1024 * 1024) return actionErr("File size must be 25MB or less.", "VALIDATION");
+
+      const cleanedName = replacement.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const newPath = `${projectId}/${ticketId}/${Date.now()}-${randomUUID()}-${cleanedName}`;
+      const buffer = Buffer.from(await replacement.arrayBuffer());
+
+      const { error: uploadError } = await supabase.storage.from("ticket-attachments").upload(newPath, buffer, {
+        contentType: replacement.type || "application/octet-stream",
+        upsert: false
+      });
+      if (uploadError) return actionErr(`Could not replace file: ${uploadError.message}`);
+
+      const { data: publicData } = supabase.storage.from("ticket-attachments").getPublicUrl(newPath);
+      nextStoragePath = newPath;
+      nextFileUrl = publicData.publicUrl;
+      nextContentType = replacement.type || null;
+      nextFileSize = replacement.size;
+      if (!fileName) nextFileName = replacement.name;
+    }
+
+    const updatePayload: Record<string, string | number | null> = {
+      file_name: nextFileName
+    };
+    if (nextFileUrl) {
+      updatePayload.file_url = nextFileUrl;
+      updatePayload.storage_path = nextStoragePath;
+      updatePayload.content_type = nextContentType ?? null;
+      updatePayload.file_size = nextFileSize ?? null;
+    }
+
+    const { error: updateError } = await supabase.from("ticket_attachments").update(updatePayload).eq("id", attachmentId);
+    if (updateError) return actionErr(`Could not update attachment: ${updateError.message}`);
+
+    if (nextFileUrl) {
+      await supabase.storage.from("ticket-attachments").remove([attachment.storage_path]);
+    }
+
+    revalidatePath(`/projects/${projectId}/tickets/${ticketId}`);
+    return actionOk(null, "Attachment updated.");
+  });
+}
+
+export async function deleteTicketAttachmentAction(input: {
+  projectId: string;
+  ticketId: string;
+  attachmentId: string;
+}): Promise<ActionResult<null>> {
+  return safeAction(async () => {
+    if (!input.projectId || !input.ticketId || !input.attachmentId) {
+      return actionErr("Invalid attachment request.", "VALIDATION");
+    }
+
+    const actorId = await resolveActorId();
+    if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
+
+    const supabase = await createSupabaseServerClient();
+    const { data: member } = await supabase
+      .from("project_members")
+      .select("role")
+      .eq("project_id", input.projectId)
+      .eq("user_id", actorId)
+      .maybeSingle();
+    if (!member) return actionErr("You do not have access to this project.", "FORBIDDEN");
+
+    const { data: attachment } = await supabase
+      .from("ticket_attachments")
+      .select("id, uploaded_by, storage_path")
+      .eq("id", input.attachmentId)
+      .eq("ticket_id", input.ticketId)
+      .maybeSingle();
+    if (!attachment) return actionErr("Attachment not found.", "NOT_FOUND");
+
+    const canDelete = attachment.uploaded_by === actorId || member.role === "owner" || member.role === "admin";
+    if (!canDelete) return actionErr("Only uploader, owner, or admin can delete this file.", "FORBIDDEN");
+
+    const { error: deleteRowError } = await supabase.from("ticket_attachments").delete().eq("id", input.attachmentId);
+    if (deleteRowError) return actionErr(`Could not delete attachment: ${deleteRowError.message}`);
+
+    await supabase.storage.from("ticket-attachments").remove([attachment.storage_path]);
+    revalidatePath(`/projects/${input.projectId}/tickets/${input.ticketId}`);
+    return actionOk(null, "Attachment deleted.");
+  });
+}
+
 export async function updateTicketAction(input: TicketInput): Promise<ActionResult<null>> {
   return safeAction(async () => {
     const parsed = ticketSchema.safeParse(input);
@@ -467,11 +713,12 @@ export async function updateTicketAction(input: TicketInput): Promise<ActionResu
     if (!parsed.data.id) return actionErr("Ticket id is required.", "VALIDATION");
 
     const supabase = await createSupabaseServerClient();
+    const safeDescription = sanitizeRichTextHtml(parsed.data.description ?? null) || null;
     const { error } = await supabase
       .from("tickets")
       .update({
         title: parsed.data.title,
-        description: parsed.data.description ?? null,
+        description: safeDescription,
         status: parsed.data.status,
         priority: parsed.data.priority,
         type: parsed.data.type,

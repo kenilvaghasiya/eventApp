@@ -10,8 +10,8 @@ import { createTicketAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { labelize, ticketPriorities, ticketStatuses, ticketTypes } from "@/lib/constants";
 import { ticketSchema, type TicketInput } from "@/lib/validations";
 
@@ -46,6 +46,7 @@ export function TicketCreateForm({ projectId, assignees }: Props) {
         toast.error(result.error);
         return;
       }
+
       toast.success(result.message ?? "Ticket created");
       router.push(`/projects/${projectId}/tickets/${result.data.ticketId}`);
       router.refresh();
@@ -76,7 +77,11 @@ export function TicketCreateForm({ projectId, assignees }: Props) {
             <FormItem>
               <FormLabel>Description</FormLabel>
               <FormControl>
-                <Textarea placeholder="Add markdown details, acceptance criteria, links..." {...field} />
+                <RichTextEditor
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                  placeholder="Add description with bold text, bullet points, links, and more..."
+                />
               </FormControl>
               <FormMessage />
             </FormItem>

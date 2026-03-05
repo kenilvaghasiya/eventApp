@@ -97,6 +97,18 @@ create table if not exists public.comments (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.ticket_attachments (
+  id uuid primary key default gen_random_uuid(),
+  ticket_id uuid not null references public.tickets(id) on delete cascade,
+  uploaded_by uuid not null references public.profiles(id) on delete cascade,
+  file_name text not null,
+  file_url text not null,
+  storage_path text not null,
+  content_type text,
+  file_size bigint,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.chat_messages (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references public.projects(id) on delete cascade,
@@ -183,6 +195,7 @@ create index if not exists idx_projects_owner on public.projects(owner_id);
 create index if not exists idx_members_project on public.project_members(project_id);
 create index if not exists idx_tickets_project on public.tickets(project_id);
 create index if not exists idx_comments_ticket on public.comments(ticket_id);
+create index if not exists idx_ticket_attachments_ticket on public.ticket_attachments(ticket_id);
 create index if not exists idx_chat_project on public.chat_messages(project_id);
 create index if not exists idx_notifications_user on public.notifications(user_id);
 create index if not exists idx_dm_sender on public.direct_messages(sender_id);
@@ -195,6 +208,7 @@ alter table public.invitations enable row level security;
 alter table public.sprints enable row level security;
 alter table public.tickets enable row level security;
 alter table public.comments enable row level security;
+alter table public.ticket_attachments enable row level security;
 alter table public.chat_messages enable row level security;
 alter table public.notifications enable row level security;
 alter table public.direct_messages enable row level security;
@@ -305,6 +319,30 @@ create policy "comments_insert_member" on public.comments for insert to authenti
 create policy "comments_update_own" on public.comments for update to authenticated using (author_id = auth.uid());
 create policy "comments_delete_own" on public.comments for delete to authenticated using (author_id = auth.uid());
 
+create policy "attachments_select_member" on public.ticket_attachments for select to authenticated using (
+  exists (
+    select 1
+    from public.tickets t
+    join public.project_members m on m.project_id = t.project_id
+    where t.id = ticket_id and m.user_id = auth.uid()
+  )
+);
+create policy "attachments_insert_member" on public.ticket_attachments for insert to authenticated with check (
+  uploaded_by = auth.uid() and exists (
+    select 1
+    from public.tickets t
+    join public.project_members m on m.project_id = t.project_id
+    where t.id = ticket_id and m.user_id = auth.uid()
+  )
+);
+create policy "attachments_delete_owner_or_admin" on public.ticket_attachments for delete to authenticated using (
+  uploaded_by = auth.uid() or exists (
+    select 1
+    from public.tickets t
+    where t.id = ticket_id and public.is_project_admin(t.project_id)
+  )
+);
+
 create policy "dm_select_own" on public.direct_messages for select to authenticated using (
   sender_id = auth.uid() or recipient_id = auth.uid()
 );
@@ -325,3 +363,97 @@ create policy "chat_member" on public.chat_messages for all to authenticated usi
 
 create policy "notifications_self" on public.notifications for select to authenticated using (user_id = auth.uid());
 create policy "notifications_update_self" on public.notifications for update to authenticated using (user_id = auth.uid());
+
+-- Storage bucket for profile avatars
+insert into storage.buckets (id, name, public)
+values ('profile-images', 'profile-images', true)
+on conflict (id) do update
+set public = excluded.public;
+
+drop policy if exists "profile_images_select_public" on storage.objects;
+create policy "profile_images_select_public"
+on storage.objects
+for select
+to public
+using (bucket_id = 'profile-images');
+
+drop policy if exists "profile_images_insert_own_folder" on storage.objects;
+create policy "profile_images_insert_own_folder"
+on storage.objects
+for insert
+to authenticated
+with check (
+  bucket_id = 'profile-images'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+drop policy if exists "profile_images_update_own_folder" on storage.objects;
+create policy "profile_images_update_own_folder"
+on storage.objects
+for update
+to authenticated
+using (
+  bucket_id = 'profile-images'
+  and (storage.foldername(name))[1] = auth.uid()::text
+)
+with check (
+  bucket_id = 'profile-images'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+drop policy if exists "profile_images_delete_own_folder" on storage.objects;
+create policy "profile_images_delete_own_folder"
+on storage.objects
+for delete
+to authenticated
+using (
+  bucket_id = 'profile-images'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+-- Storage bucket for ticket attachments
+insert into storage.buckets (id, name, public)
+values ('ticket-attachments', 'ticket-attachments', true)
+on conflict (id) do update
+set public = excluded.public;
+
+drop policy if exists "ticket_attachments_select_public" on storage.objects;
+create policy "ticket_attachments_select_public"
+on storage.objects
+for select
+to public
+using (bucket_id = 'ticket-attachments');
+
+drop policy if exists "ticket_attachments_insert_member_project" on storage.objects;
+create policy "ticket_attachments_insert_member_project"
+on storage.objects
+for insert
+to authenticated
+with check (
+  bucket_id = 'ticket-attachments'
+  and public.is_project_member(((storage.foldername(name))[1])::uuid)
+);
+
+drop policy if exists "ticket_attachments_update_member_project" on storage.objects;
+create policy "ticket_attachments_update_member_project"
+on storage.objects
+for update
+to authenticated
+using (
+  bucket_id = 'ticket-attachments'
+  and public.is_project_member(((storage.foldername(name))[1])::uuid)
+)
+with check (
+  bucket_id = 'ticket-attachments'
+  and public.is_project_member(((storage.foldername(name))[1])::uuid)
+);
+
+drop policy if exists "ticket_attachments_delete_member_project" on storage.objects;
+create policy "ticket_attachments_delete_member_project"
+on storage.objects
+for delete
+to authenticated
+using (
+  bucket_id = 'ticket-attachments'
+  and public.is_project_member(((storage.foldername(name))[1])::uuid)
+);

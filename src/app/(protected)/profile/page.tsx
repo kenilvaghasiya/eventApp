@@ -10,7 +10,7 @@ export default async function MyProfilePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name, bio, timezone")
+    .select("display_name, bio, timezone, avatar_url")
     .eq("id", user?.id ?? "")
     .maybeSingle();
 
@@ -28,6 +28,7 @@ export default async function MyProfilePage() {
               bio: profile?.bio ?? "",
               timezone: profile?.timezone ?? ""
             }}
+            avatarUrl={profile?.avatar_url ?? null}
           />
         </CardContent>
       </Card>

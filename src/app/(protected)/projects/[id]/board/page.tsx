@@ -8,15 +8,22 @@ export default async function BoardPage({ params }: { params: Promise<{ id: stri
   const normalized = tickets.map((ticket) => ({
     id: ticket.id,
     title: ticket.title,
+    description: ticket.description,
     status: ticket.status,
     priority: ticket.priority,
-    ticket_number: ticket.ticket_number
+    ticket_number: ticket.ticket_number,
+    assignee_id: ticket.assignee_id
   }));
 
   const assignees = members.map((member) => ({
     id: member.user_id,
-    display_name: member.profiles?.display_name ?? null
+    display_name: member.profiles?.display_name ?? null,
+    avatar_url: member.profiles?.avatar_url ?? null
   }));
 
-  return <BoardDnd projectId={id} initialTickets={normalized} assignees={assignees} />;
+  const assigneeDirectory = Object.fromEntries(
+    assignees.map((assignee) => [assignee.id, { name: assignee.display_name, avatarUrl: assignee.avatar_url }])
+  );
+
+  return <BoardDnd projectId={id} initialTickets={normalized} assignees={assignees} assigneeDirectory={assigneeDirectory} />;
 }

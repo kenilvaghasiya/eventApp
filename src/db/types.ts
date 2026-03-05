@@ -197,6 +197,38 @@ export type Database = {
         };
         Relationships: [];
       };
+      ticket_attachments: {
+        Row: {
+          id: string;
+          ticket_id: string;
+          uploaded_by: string;
+          file_name: string;
+          file_url: string;
+          storage_path: string;
+          content_type: string | null;
+          file_size: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          ticket_id: string;
+          uploaded_by: string;
+          file_name: string;
+          file_url: string;
+          storage_path: string;
+          content_type?: string | null;
+          file_size?: number | null;
+          created_at?: string;
+        };
+        Update: {
+          file_name?: string;
+          file_url?: string;
+          storage_path?: string;
+          content_type?: string | null;
+          file_size?: number | null;
+        };
+        Relationships: [];
+      };
       chat_messages: {
         Row: {
           id: string;

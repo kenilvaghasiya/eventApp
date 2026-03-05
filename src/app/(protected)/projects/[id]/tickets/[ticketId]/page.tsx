@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { labelize } from "@/lib/constants";
 import { getTicketDetails } from "@/lib/data";
 import { formatDateTime } from "@/lib/date";
+import { sanitizeRichTextHtml } from "@/lib/rich-text";
 
 export default async function TicketDetailPage({ params }: { params: Promise<{ id: string; ticketId: string }> }) {
   const { id, ticketId } = await params;
@@ -24,7 +25,14 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
             <Badge>{labelize(data.ticket.priority)}</Badge>
             <Badge>{labelize(data.ticket.type)}</Badge>
           </div>
-          <p className="whitespace-pre-wrap text-sm text-muted-foreground">{data.ticket.description || "No description."}</p>
+          {data.ticket.description ? (
+            <div
+              className="rich-text-content text-sm text-muted-foreground"
+              dangerouslySetInnerHTML={{ __html: sanitizeRichTextHtml(data.ticket.description) }}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">No description.</p>
+          )}
           <p className="text-xs text-muted-foreground">Updated {formatDateTime(data.ticket.updated_at)}</p>
         </CardContent>
       </Card>

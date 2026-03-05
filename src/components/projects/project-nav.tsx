@@ -10,7 +10,6 @@ const tabs = [
   { key: "tickets", label: "Tickets", path: "/tickets" },
   { key: "chat", label: "Chat", path: "/chat" },
   { key: "members", label: "Members", path: "/members" },
-  { key: "sprints", label: "Sprints", path: "/sprints" },
   { key: "reports", label: "Reports", path: "/reports" },
   { key: "settings", label: "Settings", path: "/settings" }
 ];
