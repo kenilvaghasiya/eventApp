@@ -1,11 +1,14 @@
 import Link from "next/link";
 
+import { QuickAddTicketModal } from "@/components/tickets/quick-add-ticket-modal";
+import { TicketRowActions } from "@/components/tickets/ticket-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { labelize } from "@/lib/constants";
-import { getProjectTickets } from "@/lib/data";
+import { Select } from "@/components/ui/select";
+import { labelize, ticketStatuses } from "@/lib/constants";
+import { getProjectMembers, getProjectTickets } from "@/lib/data";
 import { formatDateTime } from "@/lib/date";
 
 export default async function TicketsPage({
@@ -17,21 +20,30 @@ export default async function TicketsPage({
 }) {
   const { id } = await params;
   const { q, status } = await searchParams;
-  const tickets = await getProjectTickets(id, { q, status });
+  const [tickets, members] = await Promise.all([getProjectTickets(id, { q, status }), getProjectMembers(id)]);
+  const assignees = members.map((member) => ({ id: member.user_id, display_name: member.profiles?.display_name ?? null }));
 
   return (
     <section className="space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <form className="flex flex-1 gap-2">
           <Input name="q" defaultValue={q ?? ""} placeholder="Search ticket title..." />
-          <Input name="status" defaultValue={status ?? ""} placeholder="Filter status (e.g. todo)" className="max-w-52" />
+          <Select name="status" defaultValue={status ?? ""} className="max-w-56">
+            <option value="">All Status</option>
+            {ticketStatuses.map((item) => (
+              <option key={item} value={item}>
+                {labelize(item)}
+              </option>
+            ))}
+          </Select>
           <Button type="submit" variant="outline">
             Filter
           </Button>
+          <Button asChild type="button" variant="ghost">
+            <Link href={`/projects/${id}/tickets`}>Reset</Link>
+          </Button>
         </form>
-        <Button asChild>
-          <Link href={`/projects/${id}/tickets/new`}>Create Ticket</Link>
-        </Button>
+        <QuickAddTicketModal projectId={id} assignees={assignees} triggerLabel="Create Ticket" />
       </div>
 
       <Card>
@@ -48,6 +60,7 @@ export default async function TicketsPage({
                 <th className="p-2">Priority</th>
                 <th className="p-2">Type</th>
                 <th className="p-2">Updated</th>
+                <th className="p-2">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -65,6 +78,23 @@ export default async function TicketsPage({
                   <td className="p-2">{labelize(ticket.priority)}</td>
                   <td className="p-2">{labelize(ticket.type)}</td>
                   <td className="p-2 text-muted-foreground">{formatDateTime(ticket.updated_at)}</td>
+                  <td className="p-2">
+                    <TicketRowActions
+                      projectId={id}
+                      ticket={{
+                        id: ticket.id,
+                        title: ticket.title,
+                        description: ticket.description,
+                        status: ticket.status,
+                        priority: ticket.priority,
+                        type: ticket.type,
+                        assignee_id: ticket.assignee_id,
+                        due_date: ticket.due_date,
+                        estimate: ticket.estimate
+                      }}
+                      assignees={assignees}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>

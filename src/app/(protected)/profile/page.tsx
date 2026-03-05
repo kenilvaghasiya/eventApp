@@ -15,20 +15,22 @@ export default async function MyProfilePage() {
     .maybeSingle();
 
   return (
-    <Card className="max-w-2xl">
-      <CardHeader>
-        <CardTitle>My Profile</CardTitle>
-        <CardDescription>Update your display settings.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ProfileForm
-          defaults={{
-            displayName: profile?.display_name ?? "",
-            bio: profile?.bio ?? "",
-            timezone: profile?.timezone ?? ""
-          }}
-        />
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="border-b bg-gradient-to-r from-slate-50 to-white">
+          <CardTitle className="text-3xl">My Profile</CardTitle>
+          <CardDescription>Manage your personal details and workspace preferences.</CardDescription>
+        </CardHeader>
+        <CardContent className="p-6">
+          <ProfileForm
+            defaults={{
+              displayName: profile?.display_name ?? "",
+              bio: profile?.bio ?? "",
+              timezone: profile?.timezone ?? ""
+            }}
+          />
+        </CardContent>
+      </Card>
+    </div>
   );
 }

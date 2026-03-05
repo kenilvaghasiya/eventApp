@@ -42,6 +42,11 @@ export const invitationSchema = z.object({
   role: z.enum(["admin", "developer", "viewer"])
 });
 
+export const removeMemberSchema = z.object({
+  projectId: z.string().uuid(),
+  memberUserId: z.string().uuid()
+});
+
 export const ticketSchema = z.object({
   id: z.string().uuid().optional(),
   projectId: z.string().uuid(),
@@ -75,6 +80,7 @@ export type ProfileInput = z.infer<typeof profileSchema>;
 export type ProjectInput = z.infer<typeof projectSchema>;
 export type ProjectSettingsInput = z.infer<typeof projectSettingsSchema>;
 export type InvitationInput = z.infer<typeof invitationSchema>;
+export type RemoveMemberInput = z.infer<typeof removeMemberSchema>;
 export type TicketInput = z.infer<typeof ticketSchema>;
 export type CommentInput = z.infer<typeof commentSchema>;
 export type ChatInput = z.infer<typeof chatSchema>;

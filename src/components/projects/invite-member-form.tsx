@@ -13,7 +13,7 @@ import { Select } from "@/components/ui/select";
 import { inviteRoles, labelize } from "@/lib/constants";
 import { invitationSchema, type InvitationInput } from "@/lib/validations";
 
-export function InviteMemberForm({ projectId }: { projectId: string }) {
+export function InviteMemberForm({ projectId, canInvite = false }: { projectId: string; canInvite?: boolean }) {
   const [isPending, startTransition] = useTransition();
   const form = useForm<InvitationInput>({
     resolver: zodResolver(invitationSchema),
@@ -42,7 +42,7 @@ export function InviteMemberForm({ projectId }: { projectId: string }) {
             <FormItem>
               <FormLabel>Email *</FormLabel>
               <FormControl>
-                <Input type="email" placeholder="teammate@example.com" {...field} />
+                <Input type="email" placeholder="teammate@example.com" disabled={!canInvite || isPending} {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -56,7 +56,7 @@ export function InviteMemberForm({ projectId }: { projectId: string }) {
             <FormItem>
               <FormLabel>Role *</FormLabel>
               <FormControl>
-                <Select {...field}>
+                <Select {...field} disabled={!canInvite || isPending}>
                   {inviteRoles.map((role) => (
                     <option key={role} value={role}>
                       {labelize(role)}
@@ -69,10 +69,11 @@ export function InviteMemberForm({ projectId }: { projectId: string }) {
           )}
         />
 
-        <Button type="submit" disabled={isPending}>
+        <Button type="submit" disabled={isPending || !canInvite}>
           {isPending ? "Inviting..." : "Invite"}
         </Button>
       </form>
+      {!canInvite && <p className="mt-2 text-sm text-slate-500">Only project owner can invite or remove members.</p>}
     </Form>
   );
 }

@@ -29,18 +29,7 @@ export default async function DashboardPage({
           <h1 className="text-3xl font-black tracking-tight text-slate-900">Hello, welcome back</h1>
           <p className="mt-1 text-slate-500">Let&apos;s organize your tasks, projects, and team updates.</p>
         </div>
-        <Card className="rounded-2xl border-slate-200 bg-[linear-gradient(140deg,#eef2ff_0%,#f8fafc_100%)] shadow-none">
-          <CardContent className="flex items-center justify-between p-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.15em] text-slate-500">Activity</p>
-              <p className="mt-1 text-2xl font-black text-slate-900">{filteredProjects.length}</p>
-              <p className="text-sm text-slate-500">Active Projects</p>
-            </div>
-            <div className="relative grid h-24 w-24 place-items-center rounded-full bg-[conic-gradient(#4f46e5_0_58%,#e2e8f0_58_100%)]">
-              <div className="grid h-16 w-16 place-items-center rounded-full bg-white text-sm font-bold text-slate-800">58%</div>
-            </div>
-          </CardContent>
-        </Card>
+      
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

@@ -13,6 +13,7 @@ import {
   chatSchema,
   commentSchema,
   invitationSchema,
+  removeMemberSchema,
   profileSchema,
   projectSchema,
   projectSettingsSchema,
@@ -23,6 +24,7 @@ import {
   type CommentInput,
   type DirectMessageInput,
   type InvitationInput,
+  type RemoveMemberInput,
   type ProfileInput,
   type ProjectInput,
   type ProjectSettingsInput,
@@ -98,6 +100,13 @@ async function createNotifications(userIds: string[], type: string, referenceId?
     reference_id: referenceId ?? null
   }));
   await supabase.from("notifications").insert(payload);
+}
+
+async function isProjectOwner(projectId: string, actorId: string) {
+  const supabase = await createSupabaseServerClient();
+  const { data: project } = await supabase.from("projects").select("owner_id").eq("id", projectId).maybeSingle();
+  if (!project) return false;
+  return project.owner_id === actorId;
 }
 
 function makeProjectKey(name: string, fallback = "PRJ") {
@@ -303,6 +312,9 @@ export async function inviteMemberAction(input: InvitationInput): Promise<Action
 
     const actorId = await resolveActorId();
     if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
+    if (!(await isProjectOwner(parsed.data.projectId, actorId))) {
+      return actionErr("Only project owner can invite members.", "FORBIDDEN");
+    }
 
     const supabase = await createSupabaseServerClient();
     const token = randomUUID();
@@ -347,6 +359,42 @@ export async function inviteMemberAction(input: InvitationInput): Promise<Action
         ? "Member already had an account and was added to the project."
         : "Invitation created. User will join after signup/login using this email."
     );
+  });
+}
+
+export async function removeMemberAction(input: RemoveMemberInput): Promise<ActionResult<null>> {
+  return safeAction(async () => {
+    const parsed = removeMemberSchema.safeParse(input);
+    if (!parsed.success) return actionErr(parsed.error.issues[0]?.message ?? "Invalid remove member request.", "VALIDATION");
+
+    const actorId = await resolveActorId();
+    if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
+
+    const supabase = await createSupabaseServerClient();
+    const { data: project } = await supabase.from("projects").select("owner_id").eq("id", parsed.data.projectId).maybeSingle();
+    if (!project) return actionErr("Project not found.", "NOT_FOUND");
+    if (project.owner_id !== actorId) return actionErr("Only project owner can remove members.", "FORBIDDEN");
+    if (parsed.data.memberUserId === project.owner_id) return actionErr("Owner cannot be removed from project.", "FORBIDDEN");
+
+    const { error: memberDeleteError } = await supabase
+      .from("project_members")
+      .delete()
+      .eq("project_id", parsed.data.projectId)
+      .eq("user_id", parsed.data.memberUserId);
+    if (memberDeleteError) return actionErr(`Could not remove member: ${memberDeleteError.message}`);
+
+    // Deassign removed user from project tickets so ownership stays clean.
+    const { error: ticketUpdateError } = await supabase
+      .from("tickets")
+      .update({ assignee_id: null })
+      .eq("project_id", parsed.data.projectId)
+      .eq("assignee_id", parsed.data.memberUserId);
+    if (ticketUpdateError) return actionErr(`Member removed but ticket deassign failed: ${ticketUpdateError.message}`);
+
+    revalidatePath(`/projects/${parsed.data.projectId}/members`);
+    revalidatePath(`/projects/${parsed.data.projectId}/tickets`);
+    revalidatePath(`/projects/${parsed.data.projectId}/board`);
+    return actionOk(null, "Member removed and tickets deassigned.");
   });
 }
 
@@ -439,6 +487,31 @@ export async function updateTicketAction(input: TicketInput): Promise<ActionResu
     revalidatePath(`/projects/${parsed.data.projectId}/tickets/${parsed.data.id}`);
     revalidatePath(`/projects/${parsed.data.projectId}/board`);
     return actionOk(null, "Ticket updated.");
+  });
+}
+
+export async function deleteTicketAction(input: { projectId: string; ticketId: string }): Promise<ActionResult<null>> {
+  return safeAction(async () => {
+    if (!input.projectId || !input.ticketId) return actionErr("Ticket id is required.", "VALIDATION");
+
+    const actorId = await resolveActorId();
+    if (!actorId) return actionErr("Please login again.", "UNAUTHORIZED");
+
+    const supabase = await createSupabaseServerClient();
+    const { data: ticket } = await supabase
+      .from("tickets")
+      .select("project_id")
+      .eq("id", input.ticketId)
+      .eq("project_id", input.projectId)
+      .maybeSingle();
+    if (!ticket) return actionErr("Ticket not found.", "NOT_FOUND");
+
+    const { error } = await supabase.from("tickets").delete().eq("id", input.ticketId).eq("project_id", input.projectId);
+    if (error) return actionErr(`Could not delete ticket: ${error.message}`);
+
+    revalidatePath(`/projects/${input.projectId}/tickets`);
+    revalidatePath(`/projects/${input.projectId}/board`);
+    return actionOk(null, "Ticket deleted.");
   });
 }
 

@@ -1,6 +1,7 @@
 import type { User } from "@supabase/supabase-js";
 
 import type { Database } from "@/db/types";
+import { ticketStatuses } from "@/lib/constants";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type ProjectRow = Database["public"]["Tables"]["projects"]["Row"];
@@ -8,6 +9,7 @@ type ProjectMemberRow = Database["public"]["Tables"]["project_members"]["Row"];
 type TicketRow = Database["public"]["Tables"]["tickets"]["Row"];
 type NotificationRow = Database["public"]["Tables"]["notifications"]["Row"];
 type DirectMessageRow = Database["public"]["Tables"]["direct_messages"]["Row"];
+type SprintRow = Database["public"]["Tables"]["sprints"]["Row"];
 
 type MemberProfile = { display_name: string | null; avatar_url?: string | null };
 type MemberWithProfile = ProjectMemberRow & { profiles: MemberProfile | null };
@@ -99,10 +101,26 @@ export async function getProjectTickets(
     .eq("project_id", projectId)
     .order("updated_at", { ascending: false });
 
-  if (filters?.status) query = query.eq("status", filters.status as TicketRow["status"]);
+  if (filters?.status) {
+    const normalizedStatus = filters.status.toLowerCase().trim().replace(/\s+/g, "_");
+    if ((ticketStatuses as readonly string[]).includes(normalizedStatus)) {
+      query = query.eq("status", normalizedStatus as TicketRow["status"]);
+    }
+  }
   if (filters?.q) query = query.ilike("title", `%${filters.q}%`);
 
   const { data } = await query;
+  return data ?? [];
+}
+
+export async function getProjectSprints(projectId: string): Promise<SprintRow[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase
+    .from("sprints")
+    .select("id, project_id, name, start_date, end_date, status, created_at")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
+
   return data ?? [];
 }
 

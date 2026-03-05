@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { SendHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { useForm } from "react-hook-form";
@@ -34,20 +35,28 @@ export function ChatComposer({ projectId }: { projectId: string }) {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="flex gap-2">
+      <form
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm"
+      >
         <FormField
           control={form.control}
           name="body"
           render={({ field }) => (
             <FormItem className="flex-1">
               <FormControl>
-                <Input placeholder="Write a message..." {...field} />
+                <Input
+                  placeholder="Write a message..."
+                  className="h-11 rounded-xl border-0 bg-slate-100/90 shadow-none focus-visible:ring-2"
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        <Button type="submit" disabled={isPending}>
+        <Button type="submit" disabled={isPending} className="h-11 rounded-xl px-4">
+          <SendHorizontal className="mr-1 h-4 w-4" />
           {isPending ? "Sending..." : "Send"}
         </Button>
       </form>

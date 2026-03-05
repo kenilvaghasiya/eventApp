@@ -2,17 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Bell, FolderKanban, LayoutDashboard, MessageCircle, Settings, User } from "lucide-react";
+import { Bell, LayoutDashboard, MessageCircle, Settings } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/projects/new", label: "Projects", icon: FolderKanban },
   { href: "/messages", label: "Messages", icon: MessageCircle },
   { href: "/notifications", label: "Notifications", icon: Bell },
-  { href: "/profile", label: "Profile", icon: User },
-  { href: "/projects", label: "Reports", icon: BarChart3 },
   { href: "/profile", label: "Settings", icon: Settings }
 ];
 

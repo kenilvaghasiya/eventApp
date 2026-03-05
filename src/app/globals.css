@@ -35,3 +35,23 @@ body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));
 }
+
+.board-lanes-scroll {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #e2e8f0;
+}
+
+.board-lanes-scroll::-webkit-scrollbar {
+  height: 10px;
+}
+
+.board-lanes-scroll::-webkit-scrollbar-track {
+  background: #e2e8f0;
+  border-radius: 9999px;
+}
+
+.board-lanes-scroll::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 9999px;
+}

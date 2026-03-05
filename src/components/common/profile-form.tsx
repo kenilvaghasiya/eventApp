@@ -10,12 +10,32 @@ import { updateProfileAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { profileSchema, type ProfileInput } from "@/lib/validations";
 
 type Props = {
   defaults: ProfileInput;
 };
+
+const timezoneOptions = [
+  "America/Los_Angeles",
+  "America/Denver",
+  "America/Chicago",
+  "America/New_York",
+  "America/Phoenix",
+  "America/Anchorage",
+  "Pacific/Honolulu",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Asia/Dubai",
+  "Asia/Kolkata",
+  "Asia/Singapore",
+  "Asia/Tokyo",
+  "Australia/Sydney",
+  "UTC"
+];
 
 export function ProfileForm({ defaults }: Props) {
   const [isPending, startTransition] = useTransition();
@@ -38,36 +58,48 @@ export function ProfileForm({ defaults }: Props) {
     });
   };
 
+  const currentTz = form.watch("timezone") ?? "";
+  const selectOptions = timezoneOptions.includes(currentTz) || !currentTz ? timezoneOptions : [currentTz, ...timezoneOptions];
+
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <FormField
-          control={form.control}
-          name="displayName"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Display Name *</FormLabel>
-              <FormControl>
-                <Input placeholder="Your name" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <div className="grid gap-4 md:grid-cols-2">
+          <FormField
+            control={form.control}
+            name="displayName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Display Name *</FormLabel>
+                <FormControl>
+                  <Input placeholder="Your name" className="h-11 rounded-xl" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-        <FormField
-          control={form.control}
-          name="timezone"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Timezone</FormLabel>
-              <FormControl>
-                <Input placeholder="America/New_York" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+          <FormField
+            control={form.control}
+            name="timezone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Timezone</FormLabel>
+                <FormControl>
+                  <Select className="h-11 rounded-xl" {...field}>
+                    <option value="">Select timezone</option>
+                    {selectOptions.map((timezone) => (
+                      <option key={timezone} value={timezone}>
+                        {timezone}
+                      </option>
+                    ))}
+                  </Select>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
 
         <FormField
           control={form.control}
@@ -76,16 +108,18 @@ export function ProfileForm({ defaults }: Props) {
             <FormItem>
               <FormLabel>Bio</FormLabel>
               <FormControl>
-                <Textarea rows={4} placeholder="Short intro..." {...field} value={field.value ?? ""} />
+                <Textarea rows={5} className="rounded-xl" placeholder="Write a short intro about yourself..." {...field} value={field.value ?? ""} />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        <Button type="submit" disabled={isPending}>
-          {isPending ? "Saving..." : "Save Profile"}
-        </Button>
+        <div className="flex items-center justify-end">
+          <Button type="submit" disabled={isPending} className="min-w-32 rounded-xl">
+            {isPending ? "Saving..." : "Save Profile"}
+          </Button>
+        </div>
       </form>
     </Form>
   );
